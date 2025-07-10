@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Route Optimizer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Lora:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="container">
+    <h1>Route Optimizer</h1>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="error">{{ messages[0] }}</div>
+      {% endif %}
+    {% endwith %}
+    <form action="/optimize" method="post" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="file">Upload JSON file with addresses:</label>
+            <input type="file" name="file" id="file" accept="application/json" required>
+        </div>
+        <button type="submit">Optimize Route</button>
+    </form>
+    <div class="example">
+        <a href="/example" download>Download example JSON</a>
+        <pre>{
+  "addresses": [
+    "1600 Amphitheatre Parkway, Mountain View, CA",
+    "1 Infinite Loop, Cupertino, CA",
+    "500 Terry A Francois Blvd, San Francisco, CA"
+  ]
+}</pre>
+    </div>
+</div>
+</body>
+</html> 

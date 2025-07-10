@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optimized Route</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Lora:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="container">
+    <h1>Optimized Route</h1>
+    
+    <div class="route-info">
+        <div class="route-info-item">
+            <div class="route-info-label">Total Time</div>
+            <div class="route-info-value">{{ route.total_distance_minutes }} min</div>
+        </div>
+        <div class="route-info-item">
+            <div class="route-info-label">Algorithm</div>
+            <div class="route-info-value">{{ route.algorithm }}</div>
+        </div>
+        <div class="route-info-item">
+            <div class="route-info-label">Status</div>
+            <div class="route-info-value">{{ route.message }}</div>
+        </div>
+    </div>
+    
+    <h2>Original Order:</h2>
+    <div class="address-list">
+        {% for address in route.original_addresses %}
+            <div class="address-item">
+                <span class="address-number">{{ loop.index }}</span>
+                <span class="address-text">{{ address }}</span>
+            </div>
+        {% endfor %}
+    </div>
+    
+    <h2>Optimized Order:</h2>
+    <div class="address-list optimized">
+        {% for address in route.optimized_addresses %}
+            <div class="address-item">
+                <span class="address-number">{{ loop.index }}</span>
+                <span class="address-text">{{ address }}</span>
+            </div>
+        {% endfor %}
+    </div>
+    
+    <a href="/" class="back-link">← Back to upload</a>
+</div>
+</body>
+</html> 
