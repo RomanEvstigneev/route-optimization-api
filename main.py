@@ -3,7 +3,8 @@ import requests
 import json
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+import pytz
 from ortools.constraint_solver import routing_enums_pb2, pywrapcp
 from google.maps import routeoptimization_v1 as ro
 from google.auth import default
@@ -71,7 +72,7 @@ def optimize():
         data = json.load(file)
         addresses = data.get('addresses')
         if not addresses or not isinstance(addresses, list) or len(addresses) < 2:
-            flash('Invalid JSON format. "addresses" must be a list of at least 2 addresses.')
+            flash('Invalid JSON format. "addresses" must be a list of at least 2 addresses (start and end points).')
             return redirect(url_for('index'))
         
         if len(addresses) > 25:
@@ -146,7 +147,7 @@ def api_optimize():
         
         if len(addresses) < 2:
             return jsonify({
-                'error': 'At least 2 addresses are required',
+                'error': 'At least 2 addresses are required (start and end points)',
                 'success': False
             }), 400
         
@@ -163,12 +164,18 @@ def api_optimize():
                 'success': False
             }), 500
         
+        # Extract optional time windows configuration
+        time_windows_config = data.get('time_windows', None)
+        
         # Perform route optimization
         logger.info(f"API request received - optimizing route for {len(addresses)} addresses")
         logger.info(f"Addresses: {addresses[:3]}{'...' if len(addresses) > 3 else ''}")  # Log first 3 addresses
         
+        if time_windows_config:
+            logger.info(f"Time windows configuration provided: {len(time_windows_config)} entries")
+        
         # Use Route Optimization API
-        route_info = optimize_route_with_api(addresses)
+        route_info = optimize_route_with_api(addresses, time_windows_config)
         
         if not route_info:
             return jsonify({
@@ -176,23 +183,14 @@ def api_optimize():
                 'success': False
             }), 500
         
-        # Prepare response
-        response_data = {
-            'success': True,
-            'original_addresses': addresses,
-            'optimized_addresses': route_info['optimized_addresses'],
-            'route_indices': route_info['route_indices'],
-            'optimization_info': {
-                'total_time_seconds': route_info['total_distance_seconds'],
-                'total_time_minutes': route_info['total_distance_minutes'],
-                'total_time_hours': round(route_info['total_distance_seconds'] / 3600, 2),
-                'algorithm': route_info['algorithm'],
-                'addresses_count': len(addresses)
-            },
-            'message': route_info['message']
-        }
+        # Prepare enhanced response with timing details
+        response_data = route_info  # Use the complete response from optimize_route_with_api
         
-        logger.info(f"API response - optimization successful, total time: {route_info['total_distance_seconds']}s")
+        logger.info(f"API response - optimization successful with timing details")
+        if 'timing_info' in route_info:
+            logger.info(f"Vehicle starts at: {route_info['timing_info']['vehicle_start_time']}")
+            logger.info(f"Vehicle ends at: {route_info['timing_info']['vehicle_end_time']}")
+            logger.info(f"Total time: {route_info['timing_info']['total_duration_minutes']} minutes")
         
         return jsonify(response_data), 200
         
@@ -466,65 +464,157 @@ def geocode_address(address):
         return None, None
 
 
-def optimize_route_with_api(addresses):
+def _create_time_window(window_config):
+    """
+    Create a time window configuration for Google Route Optimization API.
+    Supports both hard and soft time windows.
+    
+    Args:
+        window_config: Dictionary containing time window configuration:
+            - soft_start_time: ISO string for soft start time
+            - soft_end_time: ISO string for soft end time  
+            - hard_start_time: ISO string for hard start time
+            - hard_end_time: ISO string for hard end time
+            - cost_per_hour_before: Cost per hour for arriving before soft start
+            - cost_per_hour_after: Cost per hour for arriving after soft end
+    
+    Returns:
+        Dictionary containing time window configuration for API request
+    """
+    time_window = {}
+    
+    # Hard time windows (strict constraints)
+    if window_config.get('hard_start_time'):
+        time_window['startTime'] = window_config['hard_start_time']
+    if window_config.get('hard_end_time'):
+        time_window['endTime'] = window_config['hard_end_time']
+    
+    # Soft time windows (flexible constraints with costs)
+    if window_config.get('soft_start_time'):
+        time_window['softStartTime'] = window_config['soft_start_time']
+        if window_config.get('cost_per_hour_before'):
+            time_window['costPerHourBeforeSoftStartTime'] = window_config['cost_per_hour_before']
+    
+    if window_config.get('soft_end_time'):
+        time_window['softEndTime'] = window_config['soft_end_time']
+        if window_config.get('cost_per_hour_after'):
+            time_window['costPerHourAfterSoftEndTime'] = window_config['cost_per_hour_after']
+    
+    return time_window
+
+
+def optimize_route_with_api(addresses, time_windows_config=None):
     """
     Use Google Route Optimization API to find the optimal route.
-    This is more efficient than the old approach with multiple API calls.
+    Enhanced with timing support: starts at 23:00 today, 3 minutes per stop.
+    
+    Args:
+        addresses: List of addresses to optimize
+        time_windows_config: Optional configuration for time windows.
+                           If provided, enables soft time windows support.
+                           Format: {
+                               'enabled': True,
+                               'windows': [
+                                   {
+                                       'address_index': 1,
+                                       'soft_start_time': '2024-01-01T10:00:00Z',
+                                       'soft_end_time': '2024-01-01T14:00:00Z',
+                                       'cost_per_hour_before': 10.0,
+                                       'cost_per_hour_after': 5.0
+                                   }
+                               ]
+                           }
     """
     if not GOOGLE_CLOUD_PROJECT_ID:
         raise Exception("Google Cloud Project ID is not configured")
     
     try:
+        # Calculate start and end times (23:00 today, until next day 23:59)
+        
+        # Get current date and set start time to 23:00 today
+        today = datetime.now(pytz.UTC)
+        start_time = today.replace(hour=23, minute=0, second=0, microsecond=0)
+        
+        # If current time is past 23:00, use tomorrow 23:00
+        if today.hour >= 23:
+            start_time = start_time + timedelta(days=1)
+            
+        # Set end time to 24 hours later
+        end_time = start_time + timedelta(hours=24)
+        
+        start_time_str = start_time.isoformat().replace('+00:00', 'Z')
+        end_time_str = end_time.isoformat().replace('+00:00', 'Z')
+        
+        logger.info(f"Route planning: Start at {start_time_str}, End by {end_time_str}")
+        
         # First, geocode all addresses to get coordinates
         logger.info("Geocoding addresses to coordinates...")
         coordinates = []
+        coordinates_dict = {}  # Store coordinates for API response
         for address in addresses:
             lat, lng = geocode_address(address)
             if lat is None or lng is None:
                 raise Exception(f"Failed to geocode address: {address}")
             coordinates.append((lat, lng))
+            coordinates_dict[address] = {'latitude': lat, 'longitude': lng}
         
-        # Get depot coordinates (first address)
-        depot_lat, depot_lng = coordinates[0]
+        # Get start and end coordinates
+        start_lat, start_lng = coordinates[0]  # First address is start point
+        end_lat, end_lng = coordinates[-1]     # Last address is end point
         
-        # Create shipments for each address (except the first one which is the depot)
-        # Each shipment represents a visit to the location (pickup only)
+        # Create shipments for each address (except the first and last which are start/end points)
+        # Each shipment represents a visit to the location (pickup only) with 3 minutes service time
         shipments = []
-        for i, (lat, lng) in enumerate(coordinates[1:], 1):  # Skip depot
+        customer_coordinates = coordinates[1:-1]  # Skip start and end points
+        for i, (lat, lng) in enumerate(customer_coordinates, 1):  # Customer addresses only
+            pickup_request = {
+                "arrival_location": {
+                    "latitude": lat,
+                    "longitude": lng
+                },
+                "duration": "180s"  # 3 minutes service time per stop
+            }
+            
+            # Add time windows if configured
+            if time_windows_config and time_windows_config.get('enabled', False):
+                time_windows = time_windows_config.get('windows', [])
+                # Find time window for this address
+                # i is 1-based customer index, original address index is i (since customers start from index 1)
+                original_address_index = i  # Customer index in original addresses array
+                for window in time_windows:
+                    window_address_index = window.get('address_index')
+                    if window_address_index == original_address_index:
+                        pickup_request["time_windows"] = [_create_time_window(window)]
+                        logger.info(f"Applied time window to customer address {original_address_index} (customer #{i}): {window}")
+                        break
+            
             shipment = {
-                "pickups": [
-                    {
-                        "arrival_location": {
-                            "latitude": lat,
-                            "longitude": lng
-                        }
-                    }
-                ]
+                "pickups": [pickup_request]
                 # No deliveries - just visit the location
             }
             shipments.append(shipment)
         
-        # Create vehicle starting and ending at the depot
+        # Create vehicle with separate start and end locations
         vehicle = {
             "start_location": {
-                "latitude": depot_lat,
-                "longitude": depot_lng
+                "latitude": start_lat,
+                "longitude": start_lng
             },
             "end_location": {
-                "latitude": depot_lat,
-                "longitude": depot_lng
+                "latitude": end_lat,
+                "longitude": end_lng
             },
             "cost_per_kilometer": 1.0
         }
         
-        # Create the optimization request (Python API uses snake_case)
+        # Create the optimization request with calculated times (Python API uses snake_case)
         request = ro.OptimizeToursRequest(
             parent=f"projects/{GOOGLE_CLOUD_PROJECT_ID}",
             model={
                 "shipments": shipments,
                 "vehicles": [vehicle],
-                "global_start_time": "2024-01-01T00:00:00Z",
-                "global_end_time": "2024-01-01T23:59:59Z"
+                "global_start_time": start_time_str,
+                "global_end_time": end_time_str
             }
         )
         
@@ -539,44 +629,134 @@ def optimize_route_with_api(addresses):
             logger.error("No routes found in optimization response")
             return None
             
-        # Parse the response
+        # Parse the response with detailed timing information
         route = response.routes[0]
         visits = route.visits
+        transitions = route.transitions if hasattr(route, 'transitions') else []
         
-        # Build the optimized address list
-        optimized_addresses = [addresses[0]]  # Start with depot
-        route_indices = [0]  # Start with depot index
+        # Build the optimized address list and timing details
+        optimized_addresses = [addresses[0]]  # Start with start point
+        route_indices = [0]  # Start with start point index
+        visit_schedule = []  # Detailed schedule with times
+        
+        # Add start point time
+        vehicle_start_time = route.vehicle_start_time if hasattr(route, 'vehicle_start_time') else start_time_str
+        visit_schedule.append({
+            'stop_number': 1,
+            'address': addresses[0],
+            'latitude': coordinates_dict[addresses[0]]['latitude'],
+            'longitude': coordinates_dict[addresses[0]]['longitude'],
+            'arrival_time': vehicle_start_time,
+            'service_duration_minutes': 0,
+            'wait_duration_minutes': 0,
+            'is_depot': addresses[0] == addresses[-1],  # True if start == end
+            'stop_type': 'Start'
+        })
         
         logger.info(f"Processing {len(visits)} visits from Route Optimization API")
-        for visit in visits:
-            # Find which shipment this visit corresponds to
+        
+        # Process each visit
+        for i, visit in enumerate(visits):
             shipment_index = visit.shipment_index
-            address_index = shipment_index + 1  # +1 because we skipped depot
-            if address_index < len(addresses):  # Safety check
+            address_index = shipment_index + 1  # +1 because customers start from index 1
+            
+            if address_index < len(addresses) - 1:  # Safety check (exclude end point)
                 optimized_addresses.append(addresses[address_index])
                 route_indices.append(address_index)
+                
+                # Extract timing information
+                arrival_time = visit.start_time if hasattr(visit, 'start_time') else None
+                visit_duration = 3  # 3 minutes service time
+                
+                # Get transition info if available
+                wait_duration = 0
+                if i < len(transitions):
+                    transition = transitions[i]
+                    if hasattr(transition, 'wait_duration'):
+                        wait_duration = transition.wait_duration.seconds / 60 if transition.wait_duration.seconds else 0
+                
+                visit_schedule.append({
+                    'stop_number': len(visit_schedule) + 1,
+                    'address': addresses[address_index],
+                    'latitude': coordinates_dict[addresses[address_index]]['latitude'],
+                    'longitude': coordinates_dict[addresses[address_index]]['longitude'],
+                    'arrival_time': arrival_time.isoformat().replace('+00:00', 'Z') if arrival_time else None,
+                    'service_duration_minutes': visit_duration,
+                    'wait_duration_minutes': round(wait_duration, 1),
+                    'is_depot': False,
+                    'stop_type': 'Customer Visit'
+                })
         
-        # Add return to depot
-        optimized_addresses.append(addresses[0])
-        route_indices.append(0)
+        # Add end point
+        end_point_index = len(addresses) - 1
+        optimized_addresses.append(addresses[end_point_index])
+        route_indices.append(end_point_index)
         
-        # Calculate total duration
+        # Add final end point arrival
+        vehicle_end_time = route.vehicle_end_time if hasattr(route, 'vehicle_end_time') else end_time_str
+        visit_schedule.append({
+            'stop_number': len(visit_schedule) + 1,
+            'address': addresses[end_point_index],
+            'latitude': coordinates_dict[addresses[end_point_index]]['latitude'],
+            'longitude': coordinates_dict[addresses[end_point_index]]['longitude'],
+            'arrival_time': vehicle_end_time.isoformat().replace('+00:00', 'Z') if hasattr(vehicle_end_time, 'isoformat') else vehicle_end_time,
+            'service_duration_minutes': 0,
+            'wait_duration_minutes': 0,
+            'is_depot': addresses[0] == addresses[end_point_index],  # True if start == end
+            'stop_type': 'End Point'
+        })
+        
+        # Calculate metrics
         total_duration = 0
+        total_distance = 0
         if hasattr(route, 'metrics'):
-            total_duration = route.metrics.total_duration.seconds
+            total_duration = route.metrics.total_duration.seconds if hasattr(route.metrics, 'total_duration') else 0
+            total_distance = route.metrics.travel_distance_meters if hasattr(route.metrics, 'travel_distance_meters') else 0
+        
+        # Extract detailed transition information
+        transition_details = []
+        for i, transition in enumerate(transitions):
+            if hasattr(transition, 'travel_duration'):
+                transition_details.append({
+                    'segment': i + 1,
+                    'travel_duration_minutes': round(transition.travel_duration.seconds / 60, 1) if transition.travel_duration.seconds else 0,
+                    'travel_distance_meters': transition.travel_distance_meters if hasattr(transition, 'travel_distance_meters') else 0,
+                    'wait_duration_minutes': round(transition.wait_duration.seconds / 60, 1) if hasattr(transition, 'wait_duration') and transition.wait_duration.seconds else 0,
+                    'start_time': transition.start_time.isoformat().replace('+00:00', 'Z') if hasattr(transition, 'start_time') and transition.start_time else None
+                })
         
         logger.info(f"Route Optimization API completed successfully")
         logger.info(f"Optimized route indices: {route_indices}")
         logger.info(f"Total duration: {total_duration} seconds ({round(total_duration/60, 2)} minutes)")
+        logger.info(f"Vehicle starts at: {vehicle_start_time}")
+        logger.info(f"Vehicle ends at: {vehicle_end_time}")
         
         return {
-            'optimized_addresses': optimized_addresses,
-            'total_distance_seconds': total_duration,
-            'total_distance_minutes': round(total_duration / 60, 2),
-            'message': 'Route optimization completed successfully using Google Route Optimization API',
+            'success': True,
+            'message': 'Route optimization completed successfully using Google Route Optimization API with separate start/end points',
             'algorithm': 'Google Route Optimization API',
+            'original_addresses': addresses,
+            'optimized_addresses': optimized_addresses,
             'route_indices': route_indices,
-            'original_addresses': addresses
+            'address_coordinates': coordinates_dict,
+            'timing_info': {
+                'vehicle_start_time': vehicle_start_time.isoformat().replace('+00:00', 'Z') if hasattr(vehicle_start_time, 'isoformat') else vehicle_start_time,
+                'vehicle_end_time': vehicle_end_time.isoformat().replace('+00:00', 'Z') if hasattr(vehicle_end_time, 'isoformat') else vehicle_end_time,
+                'total_duration_seconds': total_duration,
+                'total_duration_minutes': round(total_duration / 60, 1),
+                'total_duration_hours': round(total_duration / 3600, 2),
+                'service_time_per_stop_minutes': 3
+            },
+            'visit_schedule': visit_schedule,
+            'transition_details': transition_details,
+            'optimization_info': {
+                'addresses_count': len(addresses),
+                'total_distance_meters': total_distance,
+                'total_distance_km': round(total_distance / 1000, 2) if total_distance else 0,
+                'total_time_seconds': total_duration,
+                'total_time_minutes': round(total_duration / 60, 1),
+                'total_time_hours': round(total_duration / 3600, 2)
+            }
         }
         
     except Exception as e:

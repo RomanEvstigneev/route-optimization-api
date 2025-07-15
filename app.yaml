@@ -9,7 +9,7 @@ basic_scaling:
 entrypoint: gunicorn -b :$PORT --workers 2 --threads 4 --timeout 60 main:app
 
 env_variables:
-  GOOGLE_MAPS_API_KEY: AIzaSyBZn6wc4kwksRxpTdmjJujBHlDvhx_CRFE
+  GOOGLE_MAPS_API_KEY: AIzaSyA8Lm44z4-JVk10-PoSmcX5uX61QtAcrHk
   SECRET_KEY: route-optimization-secret-key
   GOOGLE_CLOUD_PROJECT_ID: maibach-items-routes
 
