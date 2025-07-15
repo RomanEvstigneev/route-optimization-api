@@ -167,6 +167,9 @@ def api_optimize():
         # Extract optional time windows configuration
         time_windows_config = data.get('time_windows', None)
         
+        # Extract optional priority addresses configuration
+        priority_addresses_config = data.get('priority_addresses', None)
+        
         # Perform route optimization
         logger.info(f"API request received - optimizing route for {len(addresses)} addresses")
         logger.info(f"Addresses: {addresses[:3]}{'...' if len(addresses) > 3 else ''}")  # Log first 3 addresses
@@ -174,8 +177,11 @@ def api_optimize():
         if time_windows_config:
             logger.info(f"Time windows configuration provided: {len(time_windows_config)} entries")
         
+        if priority_addresses_config:
+            logger.info(f"Priority addresses configuration provided: {len(priority_addresses_config)} entries")
+        
         # Use Route Optimization API
-        route_info = optimize_route_with_api(addresses, time_windows_config)
+        route_info = optimize_route_with_api(addresses, time_windows_config, priority_addresses_config)
         
         if not route_info:
             return jsonify({
@@ -503,7 +509,87 @@ def _create_time_window(window_config):
     return time_window
 
 
-def optimize_route_with_api(addresses, time_windows_config=None):
+def create_priority_time_windows(addresses, priority_addresses_config, base_start_time):
+    """
+    Create time windows configuration for priority addresses.
+    
+    Args:
+        addresses: List of all addresses
+        priority_addresses_config: List of priority address configurations
+        base_start_time: Base start time for route (datetime object)
+    
+    Returns:
+        Dictionary containing time windows configuration for priority addresses
+    """
+    if not priority_addresses_config:
+        return None
+    
+    time_windows = []
+    
+    for priority_config in priority_addresses_config:
+        priority_address = priority_config.get('address')
+        priority_level = priority_config.get('priority_level', 'medium')
+        preferred_time_window = priority_config.get('preferred_time_window', 'early')
+        
+        # Find the index of the priority address in the addresses list
+        address_index = None
+        for i, addr in enumerate(addresses):
+            if addr == priority_address:
+                address_index = i
+                break
+        
+        if address_index is None:
+            logger.warning(f"Priority address not found in addresses list: {priority_address}")
+            continue
+        
+        # Skip if it's start or end point (they are already fixed)
+        if address_index == 0 or address_index == len(addresses) - 1:
+            logger.warning(f"Cannot prioritize start or end point: {priority_address}")
+            continue
+        
+        # Create time window based on priority level and preferred time
+        if preferred_time_window == 'early':
+            # Early delivery preference (23:00 - 01:00)
+            soft_start_time = base_start_time
+            soft_end_time = base_start_time + timedelta(hours=2)
+        elif preferred_time_window == 'middle':
+            # Middle delivery preference (01:00 - 03:00)
+            soft_start_time = base_start_time + timedelta(hours=2)
+            soft_end_time = base_start_time + timedelta(hours=4)
+        else:  # late
+            # Late delivery preference (03:00 - 05:00)
+            soft_start_time = base_start_time + timedelta(hours=4)
+            soft_end_time = base_start_time + timedelta(hours=6)
+        
+        # Set costs based on priority level
+        if priority_level == 'high':
+            cost_per_hour_before = 0.5   # Very low cost for early arrival
+            cost_per_hour_after = 100.0  # Very high cost for late arrival
+        elif priority_level == 'medium':
+            cost_per_hour_before = 2.0   # Low cost for early arrival
+            cost_per_hour_after = 50.0   # High cost for late arrival
+        else:  # low
+            cost_per_hour_before = 10.0  # Higher cost for early arrival
+            cost_per_hour_after = 15.0   # Moderate cost for late arrival
+        
+        time_window_config = {
+            'address_index': address_index,
+            'soft_start_time': soft_start_time.isoformat().replace('+00:00', 'Z'),
+            'soft_end_time': soft_end_time.isoformat().replace('+00:00', 'Z'),
+            'cost_per_hour_before': cost_per_hour_before,
+            'cost_per_hour_after': cost_per_hour_after
+        }
+        
+        time_windows.append(time_window_config)
+        logger.info(f"Created priority time window for {priority_address} (index {address_index}): {preferred_time_window} priority with level {priority_level}")
+    
+    return {
+        'enabled': True,
+        'windows': time_windows
+    }
+
+
+def optimize_route_with_api(addresses, time_windows_config=None, priority_addresses_config=None):
     """
     Use Google Route Optimization API to find the optimal route.
     Enhanced with timing support: starts at 23:00 today, 3 minutes per stop.
@@ -524,6 +610,15 @@ def optimize_route_with_api(addresses, time_windows_config=None):
                                    }
                                ]
                            }
+        priority_addresses_config: Optional configuration for priority addresses.
+                                 If provided, creates time windows to prioritize specific addresses.
+                                 Format: [
+                                     {
+                                         'address': 'Exact address string',
+                                         'priority_level': 'high|medium|low',
+                                         'preferred_time_window': 'early|middle|late'
+                                     }
+                                 ]
     """
     if not GOOGLE_CLOUD_PROJECT_ID:
         raise Exception("Google Cloud Project ID is not configured")
@@ -546,6 +641,23 @@ def optimize_route_with_api(addresses, time_windows_config=None):
         end_time_str = end_time.isoformat().replace('+00:00', 'Z')
         
         logger.info(f"Route planning: Start at {start_time_str}, End by {end_time_str}")
+        
+        # Handle priority addresses by creating time windows
+        if priority_addresses_config:
+            priority_time_windows = create_priority_time_windows(addresses, priority_addresses_config, start_time)
+            if priority_time_windows:
+                if time_windows_config:
+                    # Merge with existing time windows
+                    if 'windows' in time_windows_config:
+                        time_windows_config['windows'].extend(priority_time_windows['windows'])
+                    else:
+                        time_windows_config['windows'] = priority_time_windows['windows']
+                    time_windows_config['enabled'] = True
+                else:
+                    # Use priority time windows as the main time windows config
+                    time_windows_config = priority_time_windows
+                
+                logger.info(f"Applied priority time windows for {len(priority_addresses_config)} addresses")
         
         # First, geocode all addresses to get coordinates
         logger.info("Geocoding addresses to coordinates...")
