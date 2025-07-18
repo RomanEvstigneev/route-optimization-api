@@ -1,5 +1,5 @@
 # Route Optimization API Documentation
-**Version 2.2.0 | Last Updated: July 18, 2025**
+**Version 2.3.0 | Last Updated: July 18, 2025**
 
 ## Overview
 
@@ -24,7 +24,7 @@ This API provides professional route optimization functionality for delivery rou
 - ✅ **Flexible Start/End Points** - Different starting and ending locations supported
 - ✅ **Single API Call** - No multiple requests like traditional approaches
 - ✅ **Real-world Constraints** - Considers traffic, road conditions, vehicle limitations
-- ✅ **High Capacity** - Supports up to 100+ addresses (vs 10 with Distance Matrix)
+- ✅ **High Capacity** - Supports unlimited addresses (vs 10 with Distance Matrix)
 - ✅ **International Support** - Tested with German addresses, supports Unicode
 - ✅ **Auto-Geocoding** - Automatically converts addresses to coordinates
 - ✅ **GPS Coordinates** - Returns latitude/longitude for each address
@@ -122,7 +122,7 @@ Optimizes the order of addresses to minimize total travel time with separate sta
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| addresses | array | Yes | List of addresses to optimize (2-25 addresses). First = start point, last = end point, middle = optimized |
+| addresses | array | Yes | List of addresses to optimize (minimum 2 addresses). First = start point, last = end point, middle = optimized |
 | **start_time** | string | **No** | **NEW:** Custom start time in ISO format (e.g., "2024-12-21T08:00:00Z"). If not provided, defaults to 23:00 today |
 | **objective** | string | **No** | **NEW:** Optimization objective: "minimize_time" (default), "minimize_distance", or "minimize_cost" |
 | **priority_addresses** | array | **No** | Array of priority address configurations |
@@ -578,7 +578,6 @@ curl -X POST https://items-routes-route-optimisation-dot-maibach-items-routes.ew
 |-------|-------------|----------|
 | `Missing "addresses" field` | Addresses array not provided | Include addresses array in request |
 | `At least 2 addresses are required` | Too few addresses | Provide minimum 2 addresses |
-| `Maximum 25 addresses allowed` | Too many addresses | Reduce to 25 or fewer |
 | `Invalid start_time format` | Malformed start_time string | Use ISO format like "2024-12-21T08:00:00Z" |
 | `Invalid objective` | Invalid objective value | Use "minimize_time", "minimize_distance", or "minimize_cost" |
 | `Priority address not found in addresses` | Priority address doesn't match any address | Ensure exact string match |
@@ -642,10 +641,11 @@ curl https://items-routes-route-optimisation-dot-maibach-items-routes.ew.r.appsp
 
 ## API Versioning
 
-**Current Version: 2.2.0**
+**Current Version: 2.3.0**
 
 ### Version History
 
+- **2.3.0** - Removed arbitrary 25-address limit, now supports unlimited addresses
 - **2.2.0** - Added custom start time and optimization objectives (minimize_time/distance/cost)
 - **2.1.0** - Added priority address functionality
 - **2.0.0** - Separate start/end points, time windows support

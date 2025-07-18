@@ -75,9 +75,6 @@ def optimize():
             flash('Invalid JSON format. "addresses" must be a list of at least 2 addresses (start and end points).')
             return redirect(url_for('index'))
         
-        if len(addresses) > 25:
-            flash('Maximum 25 addresses allowed')
-            return redirect(url_for('index'))
     except Exception as e:
         flash(f'Error reading JSON: {e}')
         return redirect(url_for('index'))
@@ -151,11 +148,6 @@ def api_optimize():
                 'success': False
             }), 400
         
-        if len(addresses) > 25:
-            return jsonify({
-                'error': 'Maximum 25 addresses allowed',
-                'success': False
-            }), 400
         
         # Check if Google Maps API key is set
         if not GOOGLE_MAPS_API_KEY:
