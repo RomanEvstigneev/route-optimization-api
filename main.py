@@ -170,6 +170,12 @@ def api_optimize():
         # Extract optional priority addresses configuration
         priority_addresses_config = data.get('priority_addresses', None)
         
+        # Extract optional start time configuration
+        start_time_config = data.get('start_time', None)
+        
+        # Extract optional optimization objective configuration
+        objective_config = data.get('objective', None)
+        
         # Perform route optimization
         logger.info(f"API request received - optimizing route for {len(addresses)} addresses")
         logger.info(f"Addresses: {addresses[:3]}{'...' if len(addresses) > 3 else ''}")  # Log first 3 addresses
@@ -180,8 +186,14 @@ def api_optimize():
         if priority_addresses_config:
             logger.info(f"Priority addresses configuration provided: {len(priority_addresses_config)} entries")
         
+        if start_time_config:
+            logger.info(f"Custom start time provided: {start_time_config}")
+        
+        if objective_config:
+            logger.info(f"Optimization objective provided: {objective_config}")
+        
         # Use Route Optimization API
-        route_info = optimize_route_with_api(addresses, time_windows_config, priority_addresses_config)
+        route_info = optimize_route_with_api(addresses, time_windows_config, priority_addresses_config, start_time_config, objective_config)
         
         if not route_info:
             return jsonify({
@@ -589,10 +601,10 @@ def create_priority_time_windows(addresses, priority_addresses_config, base_star
     }
 
 
-def optimize_route_with_api(addresses, time_windows_config=None, priority_addresses_config=None):
+def optimize_route_with_api(addresses, time_windows_config=None, priority_addresses_config=None, start_time_config=None, objective_config=None):
     """
     Use Google Route Optimization API to find the optimal route.
-    Enhanced with timing support: starts at 23:00 today, 3 minutes per stop.
+    Enhanced with configurable timing and optimization objectives.
     
     Args:
         addresses: List of addresses to optimize
@@ -619,28 +631,68 @@ def optimize_route_with_api(addresses, time_windows_config=None, priority_addres
                                          'preferred_time_window': 'early|middle|late'
                                      }
                                  ]
+        start_time_config: Optional custom start time in ISO format (e.g., '2024-12-21T08:00:00Z').
+                          If not provided, defaults to 23:00 today.
+        objective_config: Optional optimization objective ('minimize_time', 'minimize_distance', 'minimize_cost').
+                         If not provided, defaults to 'minimize_time'.
     """
     if not GOOGLE_CLOUD_PROJECT_ID:
         raise Exception("Google Cloud Project ID is not configured")
     
     try:
-        # Calculate start and end times (23:00 today, until next day 23:59)
-        
-        # Get current date and set start time to 23:00 today
-        today = datetime.now(pytz.UTC)
-        start_time = today.replace(hour=23, minute=0, second=0, microsecond=0)
-        
-        # If current time is past 23:00, use tomorrow 23:00
-        if today.hour >= 23:
-            start_time = start_time + timedelta(days=1)
+        # Calculate start and end times
+        if start_time_config:
+            # Parse custom start time
+            try:
+                from dateutil.parser import parse
+                start_time = parse(start_time_config)
+                # Ensure timezone is UTC
+                if start_time.tzinfo is None:
+                    start_time = start_time.replace(tzinfo=pytz.UTC)
+                else:
+                    start_time = start_time.astimezone(pytz.UTC)
+                logger.info(f"Using custom start time: {start_time}")
+            except Exception as e:
+                logger.error(f"Invalid start_time format '{start_time_config}': {e}")
+                raise Exception(f"Invalid start_time format. Expected ISO format like '2024-12-21T08:00:00Z'")
+        else:
+            # Default behavior: start at 23:00 today
+            today = datetime.now(pytz.UTC)
+            start_time = today.replace(hour=23, minute=0, second=0, microsecond=0)
+            
+            # If current time is past 23:00, use tomorrow 23:00
+            if today.hour >= 23:
+                start_time = start_time + timedelta(days=1)
             
         # Set end time to 24 hours later
         end_time = start_time + timedelta(hours=24)
+        
+        # Configure optimization objective
+        if objective_config:
+            if objective_config not in ['minimize_time', 'minimize_distance', 'minimize_cost']:
+                raise Exception(f"Invalid objective '{objective_config}'. Must be 'minimize_time', 'minimize_distance', or 'minimize_cost'")
+            optimization_objective = objective_config
+        else:
+            optimization_objective = 'minimize_time'  # Default
+        
+        logger.info(f"Optimization objective: {optimization_objective}")
+        
+        # Set cost parameters based on objective
+        if optimization_objective == 'minimize_distance':
+            cost_per_kilometer = 10.0  # High cost for distance
+            cost_per_hour = 0.1       # Low cost for time
+        elif optimization_objective == 'minimize_cost':
+            cost_per_kilometer = 5.0   # Medium cost for distance
+            cost_per_hour = 2.0       # Medium cost for time
+        else:  # minimize_time (default)
+            cost_per_kilometer = 1.0   # Low cost for distance
+            cost_per_hour = 10.0      # High cost for time
         
         start_time_str = start_time.isoformat().replace('+00:00', 'Z')
         end_time_str = end_time.isoformat().replace('+00:00', 'Z')
         
         logger.info(f"Route planning: Start at {start_time_str}, End by {end_time_str}")
+        logger.info(f"Cost parameters: {cost_per_kilometer}/km, {cost_per_hour}/hour")
         
         # Handle priority addresses by creating time windows
         if priority_addresses_config:
@@ -716,7 +768,7 @@ def optimize_route_with_api(addresses, time_windows_config=None, priority_addres
                 "latitude": end_lat,
                 "longitude": end_lng
             },
-            "cost_per_kilometer": 1.0
+            "cost_per_kilometer": cost_per_kilometer
         }
         
         # Create the optimization request with calculated times (Python API uses snake_case)
@@ -845,8 +897,9 @@ def optimize_route_with_api(addresses, time_windows_config=None, priority_addres
         
         return {
             'success': True,
-            'message': 'Route optimization completed successfully using Google Route Optimization API with separate start/end points',
+            'message': f'Route optimization completed successfully using Google Route Optimization API with objective: {optimization_objective}',
             'algorithm': 'Google Route Optimization API',
+            'optimization_objective': optimization_objective,
             'original_addresses': addresses,
             'optimized_addresses': optimized_addresses,
             'route_indices': route_indices,
@@ -857,7 +910,8 @@ def optimize_route_with_api(addresses, time_windows_config=None, priority_addres
                 'total_duration_seconds': total_duration,
                 'total_duration_minutes': round(total_duration / 60, 1),
                 'total_duration_hours': round(total_duration / 3600, 2),
-                'service_time_per_stop_minutes': 3
+                'service_time_per_stop_minutes': 3,
+                'custom_start_time_used': bool(start_time_config)
             },
             'visit_schedule': visit_schedule,
             'transition_details': transition_details,
@@ -867,7 +921,9 @@ def optimize_route_with_api(addresses, time_windows_config=None, priority_addres
                 'total_distance_km': round(total_distance / 1000, 2) if total_distance else 0,
                 'total_time_seconds': total_duration,
                 'total_time_minutes': round(total_duration / 60, 1),
-                'total_time_hours': round(total_duration / 3600, 2)
+                'total_time_hours': round(total_duration / 3600, 2),
+                'cost_per_kilometer': cost_per_kilometer,
+                'cost_per_hour': cost_per_hour
             }
         }
         
