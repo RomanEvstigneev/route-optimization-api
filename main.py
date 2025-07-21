@@ -61,22 +61,37 @@ def index():
 def download_example():
     return send_file('static/example.json', as_attachment=True)
 
-# Обработка загруженного файла и отображение результата
+# Обработка загруженного файла или manual input и отображение результата
 @app.route('/optimize', methods=['POST'])
 def optimize():
-    file = request.files.get('file')
-    if not file:
-        flash('No file uploaded')
-        return redirect(url_for('index'))
-    try:
-        data = json.load(file)
-        addresses = data.get('addresses')
-        if not addresses or not isinstance(addresses, list) or len(addresses) < 2:
-            flash('Invalid JSON format. "addresses" must be a list of at least 2 addresses (start and end points).')
+    # Check if this is manual form submission or file upload
+    manual_data = request.form.get('manual_data')
+    
+    if manual_data:
+        # Handle manual form submission
+        try:
+            data = json.loads(manual_data)
+            logger.info("Processing manual form submission")
+        except Exception as e:
+            flash(f'Error processing manual form data: {e}')
             return redirect(url_for('index'))
-        
-    except Exception as e:
-        flash(f'Error reading JSON: {e}')
+    else:
+        # Handle file upload
+        file = request.files.get('file')
+        if not file:
+            flash('No file uploaded')
+            return redirect(url_for('index'))
+        try:
+            data = json.load(file)
+            logger.info("Processing JSON file upload")
+        except Exception as e:
+            flash(f'Error reading JSON: {e}')
+            return redirect(url_for('index'))
+    
+    # Validate addresses
+    addresses = data.get('addresses')
+    if not addresses or not isinstance(addresses, list) or len(addresses) < 2:
+        flash('Invalid format. "addresses" must be a list of at least 2 addresses (start and end points).')
         return redirect(url_for('index'))
 
     if not GOOGLE_MAPS_API_KEY:
@@ -84,12 +99,38 @@ def optimize():
         return redirect(url_for('index'))
 
     try:
-        # Use Route Optimization API for better results
-        route_info = optimize_route_with_api(addresses)
+        # Extract all parameters from data
+        time_windows_config = data.get('time_windows', None)
+        priority_addresses_config = data.get('priority_addresses', None)
+        start_time_config = data.get('start_time', None)
+        objective_config = data.get('objective', None)
+        service_time_config = data.get('service_time_minutes', 3)
+        route_name = data.get('route_name', 'Optimized Route')
+        
+        logger.info(f"Route optimization request: {len(addresses)} addresses, "
+                   f"priorities: {'Yes' if priority_addresses_config else 'No'}, "
+                   f"objective: {objective_config or 'default'}, "
+                   f"service_time: {service_time_config}min")
+        
+        # Use Route Optimization API with all parameters
+        route_info = optimize_route_with_api(
+            addresses, 
+            time_windows_config, 
+            priority_addresses_config, 
+            start_time_config, 
+            objective_config, 
+            service_time_config
+        )
         
         if not route_info:
             flash("Could not find an optimal route.")
             return redirect(url_for('index'))
+        
+        # Add route name and configuration details to the response
+        route_info['route_name'] = route_name
+        route_info['input_method'] = 'Manual Form' if manual_data else 'JSON File'
+        route_info['priority_addresses_config'] = priority_addresses_config or []
+        route_info['service_time_config'] = service_time_config
             
         return render_template('result.html', route=route_info)
         
@@ -168,6 +209,9 @@ def api_optimize():
         # Extract optional optimization objective configuration
         objective_config = data.get('objective', None)
         
+        # Extract optional service time configuration
+        service_time_config = data.get('service_time_minutes', 3)  # Default 3 minutes
+        
         # Perform route optimization
         logger.info(f"API request received - optimizing route for {len(addresses)} addresses")
         logger.info(f"Addresses: {addresses[:3]}{'...' if len(addresses) > 3 else ''}")  # Log first 3 addresses
@@ -185,7 +229,7 @@ def api_optimize():
             logger.info(f"Optimization objective provided: {objective_config}")
         
         # Use Route Optimization API
-        route_info = optimize_route_with_api(addresses, time_windows_config, priority_addresses_config, start_time_config, objective_config)
+        route_info = optimize_route_with_api(addresses, time_windows_config, priority_addresses_config, start_time_config, objective_config, service_time_config)
         
         if not route_info:
             return jsonify({
@@ -495,20 +539,20 @@ def _create_time_window(window_config):
     
     # Hard time windows (strict constraints)
     if window_config.get('hard_start_time'):
-        time_window['startTime'] = window_config['hard_start_time']
+        time_window['start_time'] = window_config['hard_start_time']
     if window_config.get('hard_end_time'):
-        time_window['endTime'] = window_config['hard_end_time']
+        time_window['end_time'] = window_config['hard_end_time']
     
-    # Soft time windows (flexible constraints with costs)
+    # Soft time windows (flexible constraints with costs) - Python API uses snake_case
     if window_config.get('soft_start_time'):
-        time_window['softStartTime'] = window_config['soft_start_time']
+        time_window['soft_start_time'] = window_config['soft_start_time']
         if window_config.get('cost_per_hour_before'):
-            time_window['costPerHourBeforeSoftStartTime'] = window_config['cost_per_hour_before']
+            time_window['cost_per_hour_before_soft_start_time'] = window_config['cost_per_hour_before']
     
     if window_config.get('soft_end_time'):
-        time_window['softEndTime'] = window_config['soft_end_time']
+        time_window['soft_end_time'] = window_config['soft_end_time']
         if window_config.get('cost_per_hour_after'):
-            time_window['costPerHourAfterSoftEndTime'] = window_config['cost_per_hour_after']
+            time_window['cost_per_hour_after_soft_end_time'] = window_config['cost_per_hour_after']
     
     return time_window
 
@@ -565,16 +609,16 @@ def create_priority_time_windows(addresses, priority_addresses_config, base_star
             soft_start_time = base_start_time + timedelta(hours=4)
             soft_end_time = base_start_time + timedelta(hours=6)
         
-        # Set costs based on priority level
+        # Set costs based on priority level (STRENGTHENED FOR BETTER PRIORITIZATION)
         if priority_level == 'high':
-            cost_per_hour_before = 0.5   # Very low cost for early arrival
-            cost_per_hour_after = 100.0  # Very high cost for late arrival
+            cost_per_hour_before = 0.1   # Ultra low cost for early arrival (was 0.5)
+            cost_per_hour_after = 500.0  # EXTREME high cost for late arrival (was 100.0)
         elif priority_level == 'medium':
-            cost_per_hour_before = 2.0   # Low cost for early arrival
-            cost_per_hour_after = 50.0   # High cost for late arrival
+            cost_per_hour_before = 1.0   # Low cost for early arrival (was 2.0)
+            cost_per_hour_after = 100.0  # High cost for late arrival (was 50.0)
         else:  # low
-            cost_per_hour_before = 10.0  # Higher cost for early arrival
-            cost_per_hour_after = 15.0   # Moderate cost for late arrival
+            cost_per_hour_before = 5.0   # Medium cost for early arrival (was 10.0)
+            cost_per_hour_after = 25.0   # Moderate cost for late arrival (was 15.0)
         
         time_window_config = {
             'address_index': address_index,
@@ -593,7 +637,7 @@ def create_priority_time_windows(addresses, priority_addresses_config, base_star
     }
 
 
-def optimize_route_with_api(addresses, time_windows_config=None, priority_addresses_config=None, start_time_config=None, objective_config=None):
+def optimize_route_with_api(addresses, time_windows_config=None, priority_addresses_config=None, start_time_config=None, objective_config=None, service_time_minutes=3):
     """
     Use Google Route Optimization API to find the optimal route.
     Enhanced with configurable timing and optimization objectives.
@@ -728,7 +772,7 @@ def optimize_route_with_api(addresses, time_windows_config=None, priority_addres
                     "latitude": lat,
                     "longitude": lng
                 },
-                "duration": "180s"  # 3 minutes service time per stop
+                "duration": f"{service_time_minutes * 60}s"  # Configurable service time per stop
             }
             
             # Add time windows if configured
@@ -822,7 +866,7 @@ def optimize_route_with_api(addresses, time_windows_config=None, priority_addres
                 
                 # Extract timing information
                 arrival_time = visit.start_time if hasattr(visit, 'start_time') else None
-                visit_duration = 3  # 3 minutes service time
+                visit_duration = service_time_minutes  # Configurable service time
                 
                 # Get transition info if available
                 wait_duration = 0
@@ -902,7 +946,7 @@ def optimize_route_with_api(addresses, time_windows_config=None, priority_addres
                 'total_duration_seconds': total_duration,
                 'total_duration_minutes': round(total_duration / 60, 1),
                 'total_duration_hours': round(total_duration / 3600, 2),
-                'service_time_per_stop_minutes': 3,
+                'service_time_per_stop_minutes': service_time_minutes,
                 'custom_start_time_used': bool(start_time_config)
             },
             'visit_schedule': visit_schedule,

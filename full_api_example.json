@@ -1,0 +1,43 @@
+{
+  "addresses": [
+    "Berlin Hauptbahnhof, Berlin, Germany",
+    "Brandenburg Gate, Berlin, Germany", 
+    "Potsdamer Platz, Berlin, Germany",
+    "Alexanderplatz, Berlin, Germany",
+    "Berlin TV Tower, Berlin, Germany",
+    "Berlin Hauptbahnhof, Berlin, Germany"
+  ],
+  "start_time": "2024-12-21T08:00:00Z",
+  "objective": "minimize_time",
+  "service_time_minutes": 5,
+  "route_name": "VIP Morning Delivery Route",
+  "priority_addresses": [
+    {
+      "address": "Brandenburg Gate, Berlin, Germany",
+      "priority_level": "high",
+      "preferred_time_window": "early"
+    },
+    {
+      "address": "Potsdamer Platz, Berlin, Germany",
+      "priority_level": "medium", 
+      "preferred_time_window": "middle"
+    },
+    {
+      "address": "Berlin TV Tower, Berlin, Germany",
+      "priority_level": "low",
+      "preferred_time_window": "late"
+    }
+  ],
+  "time_windows": {
+    "enabled": true,
+    "windows": [
+      {
+        "address_index": 2,
+        "soft_start_time": "2024-12-21T09:00:00Z",
+        "soft_end_time": "2024-12-21T11:00:00Z",
+        "cost_per_hour_before": 20.0,
+        "cost_per_hour_after": 50.0
+      }
+    ]
+  }
+} 

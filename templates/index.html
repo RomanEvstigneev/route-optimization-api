@@ -3,37 +3,405 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Route Optimizer</title>
+    <title>Route Optimizer - Professional Route Planning</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Lora:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 30px;
+        }
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            background: #f5f5f5;
+            border: none;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin-right: 5px;
+            border-radius: 8px 8px 0 0;
+        }
+        .tab.active {
+            background: #007bff;
+            color: white;
+        }
+        .tab:hover {
+            background: #0056b3;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .form-section {
+            margin-bottom: 25px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+        .form-section h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 18px;
+        }
+        .address-list {
+            margin-bottom: 15px;
+        }
+        .address-input-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            gap: 10px;
+        }
+        .address-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .priority-select {
+            width: 120px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .time-window-select {
+            width: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .remove-address {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .add-address {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .config-item {
+            display: flex;
+            flex-direction: column;
+        }
+        .config-item label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        .config-item input, .config-item select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .optimize-btn {
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.3s ease;
+        }
+        .optimize-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,123,255,0.3);
+        }
+        .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .example-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e7f3ff;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+    </style>
 </head>
 <body>
 <div class="container">
-    <h1>Route Optimizer</h1>
+    <h1>🚚 Route Optimizer</h1>
+    <p style="text-align: center; color: #666; margin-bottom: 30px;">
+        Professional route optimization with priority addresses, custom service times, and multiple objectives
+    </p>
+    
     {% with messages = get_flashed_messages() %}
       {% if messages %}
         <div class="error">{{ messages[0] }}</div>
       {% endif %}
     {% endwith %}
-    <form action="/optimize" method="post" enctype="multipart/form-data">
-        <div class="form-group">
-            <label for="file">Upload JSON file with addresses:</label>
-            <input type="file" name="file" id="file" accept="application/json" required>
-        </div>
-        <button type="submit">Optimize Route</button>
-    </form>
-    <div class="example">
-        <a href="/example" download>Download example JSON</a>
-        <pre>{
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab(event, 'manual-tab')">📝 Manual Input</button>
+        <button class="tab" onclick="switchTab(event, 'json-tab')">📁 JSON Upload</button>
+    </div>
+
+    <!-- Manual Input Tab -->
+    <div id="manual-tab" class="tab-content active">
+        <form id="manual-form" action="/optimize" method="post">
+            <!-- Addresses Section -->
+            <div class="form-section">
+                <h3>🗺️ Addresses</h3>
+                <div class="address-list" id="address-list">
+                    <div class="address-input-group">
+                        <input type="text" class="address-input" placeholder="Start address (e.g., 123 Main St, City, Country)" required>
+                        <select class="priority-select">
+                            <option value="none">No Priority</option>
+                            <option value="high">High Priority</option>
+                            <option value="medium">Medium Priority</option>
+                            <option value="low">Low Priority</option>
+                        </select>
+                        <select class="time-window-select">
+                            <option value="early">Early</option>
+                            <option value="middle">Middle</option>
+                            <option value="late">Late</option>
+                        </select>
+                    </div>
+                    <div class="address-input-group">
+                        <input type="text" class="address-input" placeholder="Customer address 1" required>
+                        <select class="priority-select">
+                            <option value="none">No Priority</option>
+                            <option value="high">High Priority</option>
+                            <option value="medium">Medium Priority</option>
+                            <option value="low">Low Priority</option>
+                        </select>
+                        <select class="time-window-select">
+                            <option value="early">Early</option>
+                            <option value="middle">Middle</option>
+                            <option value="late">Late</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="button" class="add-address" onclick="addAddress()">+ Add Address</button>
+                <div class="help-text">
+                    First address = Start point, Last address = End point, Middle addresses = Optimized stops
+                </div>
+            </div>
+
+            <!-- Configuration Section -->
+            <div class="form-section">
+                <h3>⚙️ Configuration</h3>
+                <div class="config-grid">
+                    <div class="config-item">
+                        <label for="start-time">Start Time</label>
+                        <input type="datetime-local" id="start-time" name="start_time">
+                        <div class="help-text">When should the route begin? (Leave empty for default 23:00 today)</div>
+                    </div>
+                    <div class="config-item">
+                        <label for="objective">Optimization Objective</label>
+                        <select id="objective" name="objective">
+                            <option value="minimize_time">Minimize Time (Default)</option>
+                            <option value="minimize_distance">Minimize Distance</option>
+                            <option value="minimize_cost">Minimize Cost</option>
+                        </select>
+                        <div class="help-text">What should we optimize for?</div>
+                    </div>
+                    <div class="config-item">
+                        <label for="service-time">Service Time per Stop (minutes)</label>
+                        <input type="number" id="service-time" name="service_time_minutes" value="3" min="1" max="60">
+                        <div class="help-text">How long spent at each stop (loading, unloading, etc.)</div>
+                    </div>
+                    <div class="config-item">
+                        <label for="route-name">Route Name (Optional)</label>
+                        <input type="text" id="route-name" name="route_name" placeholder="Morning Delivery Route">
+                        <div class="help-text">Give your route a memorable name</div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="optimize-btn" onclick="submitManualForm()">🚀 Optimize Route</button>
+        </form>
+    </div>
+
+    <!-- JSON Upload Tab -->
+    <div id="json-tab" class="tab-content">
+        <form action="/optimize" method="post" enctype="multipart/form-data">
+            <div class="form-section">
+                <h3>📁 Upload JSON Configuration</h3>
+                <div class="form-group">
+                    <label for="file">Upload JSON file with addresses and configuration:</label>
+                    <input type="file" name="file" id="file" accept="application/json" required>
+                </div>
+                <button type="submit" class="optimize-btn">🚀 Optimize Route</button>
+            </div>
+        </form>
+
+        <div class="example-section">
+            <h4>📋 Example JSON Format</h4>
+            <a href="/example" download>Download example JSON</a>
+            <pre style="background: white; padding: 15px; border-radius: 4px; overflow-x: auto; margin-top: 10px;">{
   "addresses": [
-    "1600 Amphitheatre Parkway, Mountain View, CA",
-    "1 Infinite Loop, Cupertino, CA",
-    "500 Terry A Francois Blvd, San Francisco, CA"
+    "Berlin Hauptbahnhof, Berlin, Germany",
+    "Brandenburg Gate, Berlin, Germany", 
+    "Alexanderplatz, Berlin, Germany"
+  ],
+  "start_time": "2024-12-21T08:00:00Z",
+  "objective": "minimize_time",
+  "service_time_minutes": 5,
+  "priority_addresses": [
+    {
+      "address": "Brandenburg Gate, Berlin, Germany",
+      "priority_level": "high",
+      "preferred_time_window": "early"
+    }
   ]
 }</pre>
+        </div>
     </div>
 </div>
+
+<script>
+function switchTab(evt, tabName) {
+    var i, tabContent, tabs;
+    
+    // Hide all tab contents
+    tabContent = document.getElementsByClassName("tab-content");
+    for (i = 0; i < tabContent.length; i++) {
+        tabContent[i].classList.remove("active");
+    }
+    
+    // Remove active class from all tabs
+    tabs = document.getElementsByClassName("tab");
+    for (i = 0; i < tabs.length; i++) {
+        tabs[i].classList.remove("active");
+    }
+    
+    // Show selected tab and mark button as active
+    document.getElementById(tabName).classList.add("active");
+    evt.currentTarget.classList.add("active");
+}
+
+function addAddress() {
+    const addressList = document.getElementById('address-list');
+    const newAddressGroup = document.createElement('div');
+    newAddressGroup.className = 'address-input-group';
+    
+    newAddressGroup.innerHTML = `
+        <input type="text" class="address-input" placeholder="Customer address" required>
+        <select class="priority-select">
+            <option value="none">No Priority</option>
+            <option value="high">High Priority</option>
+            <option value="medium">Medium Priority</option>
+            <option value="low">Low Priority</option>
+        </select>
+        <select class="time-window-select">
+            <option value="early">Early</option>
+            <option value="middle">Middle</option>
+            <option value="late">Late</option>
+        </select>
+        <button type="button" class="remove-address" onclick="removeAddress(this)">Remove</button>
+    `;
+    
+    addressList.appendChild(newAddressGroup);
+}
+
+function removeAddress(button) {
+    const addressList = document.getElementById('address-list');
+    if (addressList.children.length > 2) {  // Keep at least start and one destination
+        button.parentElement.remove();
+    } else {
+        alert('You need at least 2 addresses (start and end points)');
+    }
+}
+
+function submitManualForm() {
+    const addressInputs = document.querySelectorAll('.address-input');
+    const prioritySelects = document.querySelectorAll('.priority-select');
+    const timeWindowSelects = document.querySelectorAll('.time-window-select');
+    
+    // Build addresses array
+    const addresses = Array.from(addressInputs).map(input => input.value.trim()).filter(addr => addr);
+    
+    if (addresses.length < 2) {
+        alert('Please enter at least 2 addresses');
+        return false;
+    }
+    
+    // Build priority addresses
+    const priorityAddresses = [];
+    for (let i = 0; i < addresses.length; i++) {
+        const priority = prioritySelects[i].value;
+        const timeWindow = timeWindowSelects[i].value;
+        
+        if (priority !== 'none') {
+            priorityAddresses.push({
+                address: addresses[i],
+                priority_level: priority,
+                preferred_time_window: timeWindow
+            });
+        }
+    }
+    
+    // Build complete request object
+    const requestData = {
+        addresses: addresses,
+        priority_addresses: priorityAddresses,
+        start_time: document.getElementById('start-time').value ? new Date(document.getElementById('start-time').value).toISOString() : null,
+        objective: document.getElementById('objective').value,
+        service_time_minutes: parseInt(document.getElementById('service-time').value),
+        route_name: document.getElementById('route-name').value || null
+    };
+    
+    // Remove null values
+    Object.keys(requestData).forEach(key => {
+        if (requestData[key] === null || requestData[key] === '' || 
+            (Array.isArray(requestData[key]) && requestData[key].length === 0)) {
+            delete requestData[key];
+        }
+    });
+    
+    // Create hidden input with JSON data
+    const form = document.getElementById('manual-form');
+    const hiddenInput = document.createElement('input');
+    hiddenInput.type = 'hidden';
+    hiddenInput.name = 'manual_data';
+    hiddenInput.value = JSON.stringify(requestData);
+    form.appendChild(hiddenInput);
+    
+    return true;
+}
+
+// Set default datetime to tomorrow 8 AM
+document.addEventListener('DOMContentLoaded', function() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(8, 0, 0, 0);
+    
+    const datetimeInput = document.getElementById('start-time');
+    datetimeInput.value = tomorrow.toISOString().slice(0, 16);
+});
+</script>
 </body>
 </html> 

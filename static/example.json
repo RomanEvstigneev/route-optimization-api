@@ -1,7 +1,31 @@
 {
   "addresses": [
-    "Marienplatz, Munich, Germany",
+    "Berlin Hauptbahnhof, Berlin, Germany",
     "Brandenburg Gate, Berlin, Germany",
-    "Eiffel Tower, Paris, France"
-  ]
+    "Potsdamer Platz, Berlin, Germany",
+    "Alexanderplatz, Berlin, Germany",
+    "Berlin TV Tower, Berlin, Germany",
+    "Checkpoint Charlie, Berlin, Germany", 
+    "Berlin Hauptbahnhof, Berlin, Germany"
+  ],
+  "start_time": "2024-12-21T08:00:00Z",
+  "objective": "minimize_time", 
+  "service_time_minutes": 5,
+  "route_name": "Berlin Sightseeing Tour",
+  "priority_addresses": [
+    {
+      "address": "Brandenburg Gate, Berlin, Germany",
+      "priority_level": "high",
+      "preferred_time_window": "early"
+    },
+    {
+      "address": "Potsdamer Platz, Berlin, Germany", 
+      "priority_level": "medium",
+      "preferred_time_window": "middle"
+    }
+  ],
+  "time_windows": {
+    "enabled": false,
+    "windows": []
+  }
 } 

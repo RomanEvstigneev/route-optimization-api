@@ -3,52 +3,414 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Optimized Route</title>
+    <title>{{ route.route_name }} - Optimized Route Results</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Lora:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        .result-header {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .result-header h1 {
+            margin: 0 0 10px 0;
+            font-size: 2.5em;
+        }
+        .result-header p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .info-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .info-card h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 1.2em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .info-card .metric {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #007bff;
+            margin-bottom: 5px;
+        }
+        .info-card .label {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .route-section {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .route-section h2 {
+            margin: 0 0 20px 0;
+            color: #333;
+            font-size: 1.5em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .address-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .address-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+        .address-item:hover {
+            border-color: #007bff;
+            box-shadow: 0 2px 8px rgba(0,123,255,0.1);
+        }
+        .address-number {
+            background: #007bff;
+            color: white;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 15px;
+            font-size: 14px;
+        }
+        .address-content {
+            flex: 1;
+        }
+        .address-text {
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .address-meta {
+            font-size: 12px;
+            color: #666;
+            display: flex;
+            gap: 15px;
+        }
+        .priority-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .priority-high {
+            background: #dc3545;
+            color: white;
+        }
+        .priority-medium {
+            background: #ffc107;
+            color: #333;
+        }
+        .priority-low {
+            background: #28a745;
+            color: white;
+        }
+        .timing-badge {
+            background: #17a2b8;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        .coordinates {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            color: #666;
+        }
+        .visit-schedule {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+        .visit-item {
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 12px;
+            background: white;
+        }
+        .visit-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .visit-time {
+            font-weight: 600;
+            color: #007bff;
+        }
+        .visit-type {
+            font-size: 11px;
+            padding: 2px 6px;
+            background: #e9ecef;
+            border-radius: 4px;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 30px;
+            padding: 12px 24px;
+            background: #6c757d;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .back-link:hover {
+            background: #545b62;
+            transform: translateY(-2px);
+        }
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .comparison-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .comparison-header {
+            background: #f8f9fa;
+            padding: 15px;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 600;
+            color: #333;
+        }
+        .comparison-content {
+            padding: 15px;
+        }
+        @media (max-width: 768px) {
+            .comparison-grid {
+                grid-template-columns: 1fr;
+            }
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
 <div class="container">
-    <h1>Optimized Route</h1>
-    
-    <div class="route-info">
-        <div class="route-info-item">
-            <div class="route-info-label">Total Time</div>
-            <div class="route-info-value">{{ route.total_distance_minutes }} min</div>
-        </div>
-        <div class="route-info-item">
-            <div class="route-info-label">Algorithm</div>
-            <div class="route-info-value">{{ route.algorithm }}</div>
-        </div>
-        <div class="route-info-item">
-            <div class="route-info-label">Status</div>
-            <div class="route-info-value">{{ route.message }}</div>
-        </div>
+    <!-- Header -->
+    <div class="result-header">
+        <h1>🚚 {{ route.route_name }}</h1>
+        <p>{{ route.message }} • Input: {{ route.input_method }}</p>
     </div>
     
-    <h2>Original Order:</h2>
-    <div class="address-list">
-        {% for address in route.original_addresses %}
-            <div class="address-item">
-                <span class="address-number">{{ loop.index }}</span>
-                <span class="address-text">{{ address }}</span>
+    <!-- Key Metrics -->
+    <div class="info-grid">
+        <div class="info-card">
+            <h3>⏱️ Total Duration</h3>
+            <div class="metric">{{ route.timing_info.total_duration_hours }}h</div>
+            <div class="label">{{ route.timing_info.total_duration_minutes }} minutes</div>
+        </div>
+        <div class="info-card">
+            <h3>📏 Total Distance</h3>
+            <div class="metric">{{ route.optimization_info.total_distance_km }}km</div>
+            <div class="label">{{ route.optimization_info.total_distance_meters }} meters</div>
+        </div>
+        <div class="info-card">
+            <h3>📍 Addresses</h3>
+            <div class="metric">{{ route.optimization_info.addresses_count }}</div>
+            <div class="label">{{ route.optimization_info.addresses_count - 2 }} customer stops</div>
+        </div>
+        <div class="info-card">
+            <h3>🎯 Objective</h3>
+            <div class="metric" style="font-size: 1.2em; text-transform: capitalize;">
+                {{ route.optimization_objective.replace('minimize_', '') }}
             </div>
-        {% endfor %}
-    </div>
-    
-    <h2>Optimized Order:</h2>
-    <div class="address-list optimized">
-        {% for address in route.optimized_addresses %}
-            <div class="address-item">
-                <span class="address-number">{{ loop.index }}</span>
-                <span class="address-text">{{ address }}</span>
+            <div class="label">Optimization target</div>
+        </div>
+        <div class="info-card">
+            <h3>⏰ Service Time</h3>
+            <div class="metric">{{ route.timing_info.service_time_per_stop_minutes }}min</div>
+            <div class="label">Per customer stop</div>
+        </div>
+        <div class="info-card">
+            <h3>🚀 Start Time</h3>
+            <div class="metric" style="font-size: 1.1em;">
+                {{ route.timing_info.vehicle_start_time.split('T')[1][:5] }}
             </div>
-        {% endfor %}
+            <div class="label">{{ route.timing_info.vehicle_start_time.split('T')[0] }}</div>
+        </div>
     </div>
-    
-    <a href="/" class="back-link">← Back to upload</a>
+
+    <!-- Route Comparison -->
+    <div class="route-section">
+        <h2>🔄 Route Comparison</h2>
+        <div class="comparison-grid">
+            <div class="comparison-card">
+                <div class="comparison-header">📥 Original Order</div>
+                <div class="comparison-content">
+                    <div class="address-list">
+                        {% for address in route.original_addresses %}
+                            <div class="address-item">
+                                <span class="address-number">{{ loop.index }}</span>
+                                <div class="address-content">
+                                    <div class="address-text">{{ address }}</div>
+                                    {% if route.address_coordinates[address] %}
+                                    <div class="address-meta">
+                                        <span class="coordinates">
+                                            {{ "%.6f"|format(route.address_coordinates[address].latitude) }}, 
+                                            {{ "%.6f"|format(route.address_coordinates[address].longitude) }}
+                                        </span>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="comparison-card">
+                <div class="comparison-header">🚀 Optimized Order</div>
+                <div class="comparison-content">
+                    <div class="address-list">
+                        {% for address in route.optimized_addresses %}
+                            <div class="address-item">
+                                <span class="address-number">{{ loop.index }}</span>
+                                <div class="address-content">
+                                    <div class="address-text">{{ address }}</div>
+                                    <div class="address-meta">
+                                        {% if route.address_coordinates[address] %}
+                                        <span class="coordinates">
+                                            {{ "%.6f"|format(route.address_coordinates[address].latitude) }}, 
+                                            {{ "%.6f"|format(route.address_coordinates[address].longitude) }}
+                                        </span>
+                                        {% endif %}
+                                        
+                                        <!-- Show if this is a priority address -->
+                                        {% for priority_addr in route.priority_addresses_config %}
+                                            {% if priority_addr.address == address %}
+                                                <span class="priority-badge priority-{{ priority_addr.priority_level }}">
+                                                    {{ priority_addr.priority_level }} priority
+                                                </span>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Schedule -->
+    {% if route.visit_schedule %}
+    <div class="route-section">
+        <h2>📅 Detailed Visit Schedule</h2>
+        <div class="visit-schedule">
+            {% for visit in route.visit_schedule %}
+                <div class="visit-item">
+                    <div class="visit-header">
+                        <span class="visit-time">
+                            {% if visit.arrival_time %}
+                                {{ visit.arrival_time.split('T')[1][:5] }}
+                            {% else %}
+                                TBD
+                            {% endif %}
+                        </span>
+                        <span class="visit-type">{{ visit.stop_type }}</span>
+                    </div>
+                    <div style="font-weight: 500; margin-bottom: 6px;">
+                        Stop {{ visit.stop_number }}: {{ visit.address[:50] }}...
+                    </div>
+                    <div style="font-size: 12px; color: #666;">
+                        Service: {{ visit.service_duration_minutes }}min
+                        {% if visit.wait_duration_minutes > 0 %} • Wait: {{ visit.wait_duration_minutes }}min{% endif %}
+                        <br>
+                        <span class="coordinates">
+                            {{ "%.4f"|format(visit.latitude) }}, {{ "%.4f"|format(visit.longitude) }}
+                        </span>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Technical Details -->
+    <div class="route-section">
+        <h2>⚙️ Technical Details</h2>
+        <div class="info-grid">
+            <div class="info-card">
+                <h3>🧮 Algorithm</h3>
+                <div class="metric" style="font-size: 1.2em;">{{ route.algorithm }}</div>
+                <div class="label">Optimization engine</div>
+            </div>
+            <div class="info-card">
+                <h3>💰 Cost Parameters</h3>
+                <div style="font-size: 14px; color: #333;">
+                    <strong>Distance:</strong> {{ route.optimization_info.cost_per_kilometer }}/km<br>
+                    <strong>Time:</strong> {{ route.optimization_info.cost_per_hour }}/hour
+                </div>
+            </div>
+            <div class="info-card">
+                <h3>🎯 Prioritized</h3>
+                <div class="metric">
+                    {{ route.priority_addresses_config|length }}
+                </div>
+                <div class="label">Priority addresses</div>
+            </div>
+            <div class="info-card">
+                <h3>⏰ Timing Mode</h3>
+                <div class="metric" style="font-size: 1.1em;">
+                    {% if route.timing_info.custom_start_time_used %}Custom{% else %}Default{% endif %}
+                </div>
+                <div class="label">Start time configuration</div>
+            </div>
+        </div>
+
+        <!-- Route Indices for developers -->
+        <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid #007bff;">
+            <strong>Route Indices:</strong> 
+            <code style="font-family: 'IBM Plex Mono', monospace; background: white; padding: 2px 6px; border-radius: 3px;">
+                {{ route.route_indices|join(', ') }}
+            </code>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <div style="text-align: center;">
+        <a href="/" class="back-link">← Plan Another Route</a>
+    </div>
 </div>
 </body>
 </html> 
