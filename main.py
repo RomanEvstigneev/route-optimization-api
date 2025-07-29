@@ -249,8 +249,15 @@ def api_optimize():
         if objective_config:
             logger.info(f"Optimization objective provided: {objective_config}")
         
-        # Use Route Optimization API
-        route_info = optimize_route_with_api(addresses, time_windows_config, priority_addresses_config, start_time_config, objective_config, service_time_config)
+        # Choose optimization strategy based on priority addresses
+        if priority_addresses_config:
+            # Use two-stage optimization for priority addresses
+            logger.info("Using two-stage optimization due to priority addresses")
+            route_info = two_stage_optimization(addresses, priority_addresses_config, start_time_config, objective_config, service_time_config)
+        else:
+            # Use single-stage optimization for regular requests
+            logger.info("Using single-stage optimization (no priority addresses)")
+            route_info = optimize_route_with_api(addresses, time_windows_config, priority_addresses_config, start_time_config, objective_config, service_time_config)
         
         if not route_info:
             return jsonify({
@@ -578,14 +585,15 @@ def _create_time_window(window_config):
     return time_window
 
 
-def create_priority_time_windows(addresses, priority_addresses_config, base_start_time):
+def create_priority_time_windows(addresses, priority_addresses_config, base_start_time, route_end_time=None):
     """
-    Create time windows configuration for priority addresses.
+    Create time windows configuration for priority addresses using percentage-based windows.
     
     Args:
         addresses: List of all addresses
         priority_addresses_config: List of priority address configurations
         base_start_time: Base start time for route (datetime object)
+        route_end_time: Optional end time for route (datetime object). If not provided, defaults to 8 hours from start.
     
     Returns:
         Dictionary containing time windows configuration for priority addresses
@@ -616,44 +624,51 @@ def create_priority_time_windows(addresses, priority_addresses_config, base_star
             logger.warning(f"Cannot prioritize start or end point: {priority_address}")
             continue
         
-        # Create time window based on preferred time window
-        if preferred_time_window == 'earliest':
-            # Earliest delivery preference (0 - 1.5 hours)
-            soft_start_time = base_start_time
-            soft_end_time = base_start_time + timedelta(hours=1.5)
-        elif preferred_time_window == 'early':
-            # Early delivery preference (0 - 2 hours)
-            soft_start_time = base_start_time
-            soft_end_time = base_start_time + timedelta(hours=2)
-        elif preferred_time_window == 'middle':
-            # Middle delivery preference (2 - 4 hours)
-            soft_start_time = base_start_time + timedelta(hours=2)
-            soft_end_time = base_start_time + timedelta(hours=4)
-        elif preferred_time_window == 'late':
-            # Late delivery preference (4 - 6 hours)
-            soft_start_time = base_start_time + timedelta(hours=4)
-            soft_end_time = base_start_time + timedelta(hours=6)
-        else:  # latest
-            # Latest delivery preference (6 - 8 hours)
-            soft_start_time = base_start_time + timedelta(hours=6)
-            soft_end_time = base_start_time + timedelta(hours=8)
+        # Calculate total route duration - use provided end_time or default to 8 hours
+        if route_end_time:
+            total_route_duration = route_end_time - base_start_time
+        else:
+            # Fallback: standard 8-hour working day
+            total_route_duration = timedelta(hours=8)
         
-        # Set costs based on priority level according to priority mapping
+        # Create time window based on percentage of total route duration
+        if preferred_time_window == 'earliest':
+            # critical_high: First 25% of route duration
+            soft_start_time = base_start_time
+            soft_end_time = base_start_time + (total_route_duration * 0.25)
+        elif preferred_time_window == 'early':
+            # high: First 50% of route duration
+            soft_start_time = base_start_time
+            soft_end_time = base_start_time + (total_route_duration * 0.50)
+        elif preferred_time_window == 'middle':
+            # medium: Middle 50% of route duration (25%-75%)
+            soft_start_time = base_start_time + (total_route_duration * 0.25)
+            soft_end_time = base_start_time + (total_route_duration * 0.75)
+        elif preferred_time_window == 'late':
+            # low: Second 50% of route duration (50%-100%)
+            soft_start_time = base_start_time + (total_route_duration * 0.50)
+            soft_end_time = base_start_time + total_route_duration
+        else:  # latest
+            # critical_low: Last 25% of route duration (75%-100%)
+            soft_start_time = base_start_time + (total_route_duration * 0.75)
+            soft_end_time = base_start_time + total_route_duration
+        
+        # Set costs based on priority level according to priority mapping (balanced penalties)
         if priority_level == 'critical_high':
             cost_per_hour_before = 0.05  # Very low cost for early arrival
-            cost_per_hour_after = 1000.0  # Maximum penalty for late arrival
+            cost_per_hour_after = 500.0  # High penalty for late arrival (reduced from 1000)
         elif priority_level == 'high':
             cost_per_hour_before = 0.1   # Ultra low cost for early arrival
-            cost_per_hour_after = 500.0  # High penalty for late arrival
+            cost_per_hour_after = 50.0   # Moderate penalty for late arrival (reduced from 500)
         elif priority_level == 'medium':
             cost_per_hour_before = 1.0   # Low cost for early arrival 
-            cost_per_hour_after = 100.0  # Medium penalty for late arrival
+            cost_per_hour_after = 100.0  # Medium penalty for late arrival (unchanged)
         elif priority_level == 'low':
             cost_per_hour_before = 2.0   # Medium cost for early arrival
-            cost_per_hour_after = 200.0  # Updated penalty (was 25.0)
+            cost_per_hour_after = 25.0   # Low penalty for late arrival (reduced from 200)
         else:  # critical_low
             cost_per_hour_before = 5.0   # Higher cost for early arrival
-            cost_per_hour_after = 100.0  # Lower penalty for late arrival
+            cost_per_hour_after = 10.0   # Minimal penalty for late arrival (reduced from 100)
         
         time_window_config = {
             'address_index': address_index,
@@ -664,7 +679,12 @@ def create_priority_time_windows(addresses, priority_addresses_config, base_star
         }
         
         time_windows.append(time_window_config)
+        # Calculate percentage info for logging
+        window_start_pct = ((soft_start_time - base_start_time) / total_route_duration * 100) if total_route_duration.total_seconds() > 0 else 0
+        window_end_pct = ((soft_end_time - base_start_time) / total_route_duration * 100) if total_route_duration.total_seconds() > 0 else 100
+        
         logger.info(f"Created priority time window for {priority_address} (index {address_index}): {preferred_time_window} priority with level {priority_level}")
+        logger.info(f"  Window: {soft_start_time.strftime('%H:%M')}-{soft_end_time.strftime('%H:%M')} ({window_start_pct:.0f}%-{window_end_pct:.0f}% of route)")
     
     return {
         'enabled': True,
@@ -672,7 +692,7 @@ def create_priority_time_windows(addresses, priority_addresses_config, base_star
     }
 
 
-def optimize_route_with_api(addresses, time_windows_config=None, priority_addresses_config=None, start_time_config=None, objective_config=None, service_time_minutes=3):
+def optimize_route_with_api(addresses, time_windows_config=None, priority_addresses_config=None, start_time_config=None, objective_config=None, service_time_minutes=3, calculated_end_time=None):
     """
     Use Google Route Optimization API to find the optimal route.
     Enhanced with configurable timing and optimization objectives.
@@ -706,6 +726,8 @@ def optimize_route_with_api(addresses, time_windows_config=None, priority_addres
                           If not provided, defaults to 23:00 today.
         objective_config: Optional optimization objective ('minimize_time', 'minimize_distance', 'minimize_cost').
                          If not provided, defaults to 'minimize_time'.
+        calculated_end_time: Optional pre-calculated end time for two-stage optimization.
+                           If provided, used for percentage-based time window calculations.
     """
     if not GOOGLE_CLOUD_PROJECT_ID:
         raise Exception("Google Cloud Project ID is not configured")
@@ -767,7 +789,10 @@ def optimize_route_with_api(addresses, time_windows_config=None, priority_addres
         
         # Handle priority addresses by creating time windows
         if priority_addresses_config:
-            priority_time_windows = create_priority_time_windows(addresses, priority_addresses_config, start_time)
+            # Use calculated_end_time if provided (from two-stage optimization), otherwise use default end_time
+            route_end_time = calculated_end_time if calculated_end_time else end_time
+            logger.info(f"Using route end time for priority windows: {route_end_time}")
+            priority_time_windows = create_priority_time_windows(addresses, priority_addresses_config, start_time, route_end_time)
             if priority_time_windows:
                 if time_windows_config:
                     # Merge with existing time windows
@@ -1003,6 +1028,98 @@ def optimize_route_with_api(addresses, time_windows_config=None, priority_addres
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         return None
+
+
+def two_stage_optimization(addresses, priority_addresses_config, start_time_config=None, objective_config=None, service_time_minutes=3):
+    """
+    Two-stage optimization for priority addresses:
+    1. First stage: Basic optimization without priorities to get actual route duration
+    2. Second stage: Re-optimization with priorities using the calculated end time for percentage-based windows
+    
+    Args:
+        addresses: List of addresses to optimize
+        priority_addresses_config: List of priority address configurations
+        start_time_config: Optional custom start time
+        objective_config: Optional optimization objective
+        service_time_minutes: Service time per stop in minutes
+    
+    Returns:
+        Result from second stage optimization with priority addresses properly positioned
+    """
+    logger.info("Starting two-stage optimization for priority addresses")
+    
+    try:
+        # STAGE 1: Basic optimization without priorities to get real route time
+        logger.info("Stage 1: Basic optimization to calculate route duration")
+        stage1_result = optimize_route_with_api(
+            addresses=addresses,
+            time_windows_config=None,           # No time windows
+            priority_addresses_config=None,     # No priorities
+            start_time_config=start_time_config,
+            objective_config=objective_config,
+            service_time_minutes=service_time_minutes
+        )
+        
+        if not stage1_result:
+            logger.error("Stage 1 optimization failed")
+            return None
+        
+        # Extract actual end time from first stage
+        actual_end_time_str = stage1_result['timing_info']['vehicle_end_time']
+        logger.info(f"Stage 1 completed. Route ends at: {actual_end_time_str}")
+        
+        # Parse the end time for use in stage 2
+        try:
+            from dateutil.parser import parse
+            actual_end_time = parse(actual_end_time_str.replace('Z', '+00:00'))
+            logger.info(f"Parsed end time: {actual_end_time}")
+        except Exception as e:
+            logger.error(f"Failed to parse end time '{actual_end_time_str}': {e}")
+            # Fallback: use stage 1 result without re-optimization
+            logger.warning("Using stage 1 result without priority re-optimization due to parsing error")
+            return stage1_result
+        
+        # STAGE 2: Re-optimization with priorities using calculated end time
+        logger.info("Stage 2: Re-optimization with priority addresses using calculated route duration")
+        stage2_result = optimize_route_with_api(
+            addresses=addresses,
+            time_windows_config=None,
+            priority_addresses_config=priority_addresses_config,
+            start_time_config=start_time_config,
+            objective_config=objective_config,
+            service_time_minutes=service_time_minutes,
+            calculated_end_time=actual_end_time  # Pass the calculated end time
+        )
+        
+        if not stage2_result:
+            logger.warning("Stage 2 optimization failed, returning stage 1 result")
+            return stage1_result
+        
+        logger.info("Two-stage optimization completed successfully")
+        
+        # Add metadata to indicate this was a two-stage optimization
+        stage2_result['two_stage_optimization'] = True
+        stage2_result['stage1_duration'] = stage1_result['timing_info']['total_duration_minutes']
+        stage2_result['stage2_duration'] = stage2_result['timing_info']['total_duration_minutes']
+        
+        return stage2_result
+        
+    except Exception as e:
+        logger.error(f"Two-stage optimization failed: {str(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        # Fallback: try single-stage optimization
+        logger.warning("Falling back to single-stage optimization")
+        return optimize_route_with_api(
+            addresses=addresses,
+            time_windows_config=None,
+            priority_addresses_config=priority_addresses_config,
+            start_time_config=start_time_config,
+            objective_config=objective_config,
+            service_time_minutes=service_time_minutes
+        )
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=True) 

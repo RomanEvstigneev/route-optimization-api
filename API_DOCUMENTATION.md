@@ -166,25 +166,65 @@ Optimizes the order of addresses to minimize total travel time with separate sta
 **Priority addresses allow you to prioritize specific addresses for early delivery in the route.**
 
 **Priority Levels:**
-- **critical_high**: Maximum priority with extreme hourly penalties for late delivery (1000.0/hour after window)
-- **high**: High priority with strong hourly penalties for late delivery (500.0/hour after window)
-- **medium**: Medium priority with moderate hourly penalties for late delivery (100.0/hour after window)
-- **low**: Low priority with higher hourly penalties for late delivery (200.0/hour after window)
-- **critical_low**: Minimal priority with lower hourly penalties for late delivery (100.0/hour after window)
+- **critical_high**: Maximum priority with high hourly penalties for late delivery (500.0/hour after window)
+- **high**: High priority with moderate hourly penalties for late delivery (50.0/hour after window)
+- **medium**: Medium priority with baseline hourly penalties for late delivery (100.0/hour after window)
+- **low**: Low priority with reduced hourly penalties for late delivery (25.0/hour after window)
+- **critical_low**: Minimal priority with low hourly penalties for late delivery (10.0/hour after window)
 
-**Time Windows:**
-- **earliest**: 0-1.5 hours from route start (typically for critical_high priority addresses)
-- **early**: 0-2 hours from route start (typically for high priority addresses)
-- **middle**: 2-4 hours from route start (typically for medium priority addresses)
-- **late**: 4-6 hours from route start (typically for low priority addresses)
-- **latest**: 6-8 hours from route start (typically for critical_low priority addresses)
+**Time Windows (Percentage-based):**
+- **earliest**: First 25% of route duration (typically for critical_high priority addresses)
+- **early**: First 50% of route duration (typically for high priority addresses)
+- **middle**: 25%-75% of route duration (typically for medium priority addresses)
+- **late**: 50%-100% of route duration (typically for low priority addresses)
+- **latest**: Last 25% of route duration (typically for critical_low priority addresses)
 
 **Cost Penalties (per hour):**
-- **critical_high**: 0.05 cost/hour before window, 1000.0 cost/hour after window (extreme priority)
-- **high**: 0.1 cost/hour before window, 500.0 cost/hour after window (high priority)
-- **medium**: 1.0 cost/hour before window, 100.0 cost/hour after window (medium priority)
-- **low**: 2.0 cost/hour before window, 200.0 cost/hour after window (updated penalty)
-- **critical_low**: 5.0 cost/hour before window, 100.0 cost/hour after window (minimal priority)
+- **critical_high**: 0.05 cost/hour before window, 500.0 cost/hour after window (high priority, balanced)
+- **high**: 0.1 cost/hour before window, 50.0 cost/hour after window (moderate priority)
+- **medium**: 1.0 cost/hour before window, 100.0 cost/hour after window (medium priority, baseline)
+- **low**: 2.0 cost/hour before window, 25.0 cost/hour after window (low priority)
+- **critical_low**: 5.0 cost/hour before window, 10.0 cost/hour after window (minimal priority)
+
+#### Two-Stage Optimization Process
+
+**✨ NEW: Intelligent Two-Stage Optimization** - When priority addresses are specified, the API automatically uses a sophisticated two-stage optimization process for maximum accuracy.
+
+**How It Works:**
+
+**Stage 1: Baseline Route Calculation**
+- Performs initial optimization WITHOUT priority constraints
+- Calculates actual route duration from real-world data
+- Determines precise start and end times for the route
+
+**Stage 2: Priority-Optimized Route**
+- Re-optimizes the route WITH priority addresses
+- Uses actual route duration from Stage 1 for percentage-based time windows
+- Applies priority constraints based on real timing, not estimates
+
+**Benefits:**
+- **Accurate Time Windows**: Percentage calculations based on actual route duration, not estimates
+- **Adaptive Scaling**: Time windows automatically adjust to route length (short routes = shorter windows, long routes = longer windows)
+- **Better Prioritization**: Priority addresses positioned based on real-world timing constraints
+- **Fallback Safety**: If Stage 2 fails, returns Stage 1 results automatically
+
+**Automatic Activation:**
+- Triggered automatically when `priority_addresses` are specified in the request
+- No additional configuration required
+- Transparent to the client (same API interface)
+
+**Response Indicators:**
+When two-stage optimization is used, the response includes:
+```json
+{
+  "two_stage_optimization": true,
+  "stage1_duration": 180.5,
+  "stage2_duration": 175.2
+}
+```
+
+**Performance Note:**
+Two-stage optimization requires two API calls to Google's Route Optimization service, approximately doubling processing time. For routes without priority addresses, single-stage optimization continues to be used for optimal performance.
 
 #### Response
 
@@ -360,6 +400,74 @@ if response.status_code == 200:
                 print(f"✅ Priority address delivered early: position {customer_position+1}/{total_customers}")
             else:
                 print(f"⚠️ Priority address not in first half: position {customer_position+1}/{total_customers}")
+```
+
+### Two-Stage Optimization Example
+
+```python
+# Example demonstrating two-stage optimization with priority addresses
+import requests
+import json
+
+API_URL = "https://items-routes-route-optimisation-dot-maibach-items-routes.ew.r.appspot.com/api/optimize"
+
+data = {
+    "addresses": [
+        "Distribution Center, Berlin, Germany",    # Start
+        "VIP Customer, Munich, Germany",           # High priority
+        "Regular Customer A, Hamburg, Germany",    # Normal
+        "Regular Customer B, Dresden, Germany",    # Normal  
+        "Low Priority Customer, Frankfurt, Germany", # Low priority
+        "Return Center, Cologne, Germany"         # End
+    ],
+    "priority_addresses": [
+        {
+            "address": "VIP Customer, Munich, Germany",
+            "priority_level": "critical_high",
+            "preferred_time_window": "earliest"
+        },
+        {
+            "address": "Low Priority Customer, Frankfurt, Germany",
+            "priority_level": "critical_low", 
+            "preferred_time_window": "latest"
+        }
+    ],
+    "start_time": "2024-12-21T08:00:00Z",
+    "objective": "minimize_time"
+}
+
+response = requests.post(API_URL, json=data, headers={'Content-Type': 'application/json'})
+
+if response.status_code == 200:
+    result = response.json()
+    
+    # Check if two-stage optimization was used
+    if result.get('two_stage_optimization'):
+        print("🎯 Two-stage optimization was used!")
+        print(f"   Stage 1 duration: {result.get('stage1_duration')} minutes")
+        print(f"   Stage 2 duration: {result.get('stage2_duration')} minutes")
+        
+        # Analyze route timing
+        timing = result['timing_info']
+        total_duration = timing['total_duration_minutes']
+        
+        print(f"📊 Route adapted to {total_duration} minute duration")
+        print("   Time windows automatically scaled:")
+        print(f"   - Earliest: 0-{total_duration*0.25:.0f} min (25%)")
+        print(f"   - Early:    0-{total_duration*0.50:.0f} min (50%)")
+        print(f"   - Latest:   {total_duration*0.75:.0f}-{total_duration:.0f} min (25%)")
+    
+    print("\n📋 Optimized Route:")
+    for i, addr in enumerate(result['optimized_addresses'], 1):
+        priority_marker = ""
+        if "VIP Customer" in addr:
+            priority_marker = " 🔴 HIGH PRIORITY"
+        elif "Low Priority" in addr:
+            priority_marker = " 🔵 LOW PRIORITY"
+        print(f"  {i}. {addr}{priority_marker}")
+
+else:
+    print(f"❌ Error: {response.json().get('error')}")
 ```
 
 ### cURL Examples
@@ -545,10 +653,17 @@ Priority addresses automatically generate time windows based on their priority l
 }
 ```
 
-**Automatic Time Window Generation:**
-- **early**: 23:00-01:00 (first 2 hours of route)
-- **middle**: 01:00-03:00 (middle 2 hours of route)  
-- **late**: 03:00-05:00 (last 2 hours of route)
+**Automatic Time Window Generation (Percentage-based):**
+- **earliest**: First 25% of total route duration
+- **early**: First 50% of total route duration
+- **middle**: 25%-75% of total route duration
+- **late**: 50%-100% of total route duration
+- **latest**: Last 25% of total route duration
+
+**Adaptive to Route Duration:**
+Time windows automatically adjust based on the total route duration, providing better flexibility for routes of different lengths. For example:
+- 4-hour route: earliest = 0-1h, early = 0-2h, middle = 1-3h, late = 2-4h, latest = 3-4h
+- 8-hour route: earliest = 0-2h, early = 0-4h, middle = 2-6h, late = 4-8h, latest = 6-8h
 
 ## Testing
 

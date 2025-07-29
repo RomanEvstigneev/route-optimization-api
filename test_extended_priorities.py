@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 Simple test for extended priority system
-Tests the new priority levels and time windows according to the priority mapping:
-- critical_high -> earliest window, 1000 penalty
-- high -> early window, 500 penalty
-- low -> late window, 200 penalty  
-- critical_low -> latest window, 100 penalty
+Tests the new priority levels and time windows with balanced penalties:
+- critical_high -> earliest window, 500 penalty (reduced from 1000)
+- high -> early window, 50 penalty (reduced from 500)
+- low -> late window, 25 penalty (reduced from 200)
+- critical_low -> latest window, 10 penalty (reduced from 100)
 """
 
 import requests
