@@ -1,0 +1,296 @@
+{
+  "examples": [
+    {
+      "name": "Basic Route (No Priorities)",
+      "description": "Simple route optimization without any priority configurations",
+      "request": {
+        "addresses": [
+          "123 Start Street, New York, NY",
+          "456 Customer A, New York, NY",
+          "789 Customer B, New York, NY", 
+          "321 Customer C, New York, NY",
+          "999 End Street, New York, NY"
+        ]
+      }
+    },
+    {
+      "name": "Legacy Priority System (Backwards Compatible)",
+      "description": "Using the old priority system format - still works with new validation",
+      "request": {
+        "addresses": [
+          "123 Start Street, New York, NY",
+          "456 High Priority Customer, New York, NY",
+          "789 Medium Priority Customer, New York, NY",
+          "321 Low Priority Customer, New York, NY", 
+          "999 End Street, New York, NY"
+        ],
+        "priority_addresses": [
+          {
+            "address": "456 High Priority Customer, New York, NY",
+            "priority_level": "high",
+            "preferred_time_window": "early"
+          },
+          {
+            "address": "789 Medium Priority Customer, New York, NY", 
+            "priority_level": "medium",
+            "preferred_time_window": "middle"
+          },
+          {
+            "address": "321 Low Priority Customer, New York, NY",
+            "priority_level": "low",
+            "preferred_time_window": "late"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Extended Priority System (Full Features)",
+      "description": "Using all new extended priority levels and time windows",
+      "request": {
+        "addresses": [
+          "123 Start Street, New York, NY",
+          "456 Critical Emergency Customer, New York, NY",
+          "789 High Priority VIP, New York, NY",
+          "321 Standard Customer, New York, NY",
+          "654 Low Priority Customer, New York, NY",
+          "987 Flexible Timing Customer, New York, NY",
+          "999 End Street, New York, NY"
+        ],
+        "priority_addresses": [
+          {
+            "address": "456 Critical Emergency Customer, New York, NY",
+            "priority_level": "critical_high",
+            "preferred_time_window": "earliest",
+            "penalty_cost": 2000.0
+          },
+          {
+            "address": "789 High Priority VIP, New York, NY",
+            "priority_level": "high", 
+            "preferred_time_window": "early"
+          },
+          {
+            "address": "321 Standard Customer, New York, NY",
+            "priority_level": "medium",
+            "preferred_time_window": "middle"
+          },
+          {
+            "address": "654 Low Priority Customer, New York, NY",
+            "priority_level": "low",
+            "preferred_time_window": "late"
+          },
+          {
+            "address": "987 Flexible Timing Customer, New York, NY",
+            "priority_level": "critical_low",
+            "preferred_time_window": "latest",
+            "penalty_cost": 5.0
+          }
+        ],
+        "start_time": "2024-12-21T08:00:00Z",
+        "objective": "minimize_time",
+        "service_time_minutes": 5,
+        "route_name": "Extended Priority Demo Route"
+      }
+    },
+    {
+      "name": "Mixed Configuration (Partial New Format)",
+      "description": "Some addresses with partial configuration - defaults will be applied",
+      "request": {
+        "addresses": [
+          "123 Start Street, New York, NY",
+          "456 Critical Customer, New York, NY",
+          "789 Incomplete Config Customer, New York, NY",
+          "321 Default Values Customer, New York, NY",
+          "999 End Street, New York, NY"
+        ],
+        "priority_addresses": [
+          {
+            "address": "456 Critical Customer, New York, NY",
+            "priority_level": "critical_high",
+            "preferred_time_window": "earliest",
+            "penalty_cost": 1500.0
+          },
+          {
+            "address": "789 Incomplete Config Customer, New York, NY",
+            "priority_level": "high"
+          },
+          {
+            "address": "321 Default Values Customer, New York, NY"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Complete System Configuration",
+      "description": "Full configuration with all optional parameters",
+      "request": {
+        "addresses": [
+          "123 Start Street, New York, NY",
+          "456 Priority Customer 1, New York, NY",
+          "789 Priority Customer 2, New York, NY",
+          "321 Regular Customer, New York, NY",
+          "654 Time Window Customer, New York, NY",
+          "999 End Street, New York, NY"
+        ],
+        "priority_addresses": [
+          {
+            "address": "456 Priority Customer 1, New York, NY",
+            "priority_level": "critical_high",
+            "preferred_time_window": "earliest",
+            "penalty_cost": 1000.0
+          },
+          {
+            "address": "789 Priority Customer 2, New York, NY",
+            "priority_level": "medium",
+            "preferred_time_window": "middle"
+          }
+        ],
+        "time_windows": {
+          "enabled": true,
+          "windows": [
+            {
+              "address_index": 4,
+              "soft_start_time": "2024-12-21T10:00:00Z",
+              "soft_end_time": "2024-12-21T12:00:00Z",
+              "cost_per_hour_before": 10.0,
+              "cost_per_hour_after": 25.0
+            }
+          ]
+        },
+        "start_time": "2024-12-21T08:00:00Z",
+        "objective": "minimize_time",
+        "service_time_minutes": 4,
+        "route_name": "Complete Configuration Example"
+      }
+    }
+  ],
+  "error_examples": [
+    {
+      "name": "Invalid Priority Level",
+      "description": "This will fail validation",
+      "request": {
+        "addresses": ["start", "middle", "end"],
+        "priority_addresses": [
+          {
+            "address": "middle",
+            "priority_level": "super_high",
+            "preferred_time_window": "early"
+          }
+        ]
+      },
+      "expected_error": "Invalid priority_level 'super_high'"
+    },
+    {
+      "name": "Invalid Time Window", 
+      "description": "This will fail validation",
+      "request": {
+        "addresses": ["start", "middle", "end"],
+        "priority_addresses": [
+          {
+            "address": "middle",
+            "priority_level": "high",
+            "preferred_time_window": "super_early"
+          }
+        ]
+      },
+      "expected_error": "Invalid preferred_time_window 'super_early'"
+    },
+    {
+      "name": "Address Not Found",
+      "description": "This will fail validation",
+      "request": {
+        "addresses": ["start", "middle", "end"],
+        "priority_addresses": [
+          {
+            "address": "not_in_list",
+            "priority_level": "high", 
+            "preferred_time_window": "early"
+          }
+        ]
+      },
+      "expected_error": "Priority address 'not_in_list' not found in addresses list"
+    },
+    {
+      "name": "Cannot Prioritize Start Point",
+      "description": "This will fail validation",
+      "request": {
+        "addresses": ["start", "middle", "end"],
+        "priority_addresses": [
+          {
+            "address": "start",
+            "priority_level": "high",
+            "preferred_time_window": "early"
+          }
+        ]
+      },
+      "expected_error": "Cannot set priority for start point"
+    },
+    {
+      "name": "Cannot Prioritize End Point",
+      "description": "This will fail validation", 
+      "request": {
+        "addresses": ["start", "middle", "end"],
+        "priority_addresses": [
+          {
+            "address": "end",
+            "priority_level": "high",
+            "preferred_time_window": "early"
+          }
+        ]
+      },
+      "expected_error": "Cannot set priority for end point"
+    },
+    {
+      "name": "Negative Penalty Cost",
+      "description": "This will fail validation",
+      "request": {
+        "addresses": ["start", "middle", "end"],
+        "priority_addresses": [
+          {
+            "address": "middle",
+            "priority_level": "high",
+            "preferred_time_window": "early",
+            "penalty_cost": -100
+          }
+        ]
+      },
+      "expected_error": "Penalty cost must be positive"
+    }
+  ],
+  "api_usage": {
+    "endpoint": "POST /api/optimize",
+    "content_type": "application/json",
+    "curl_example": "curl -X POST http://localhost:8080/api/optimize \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"addresses\": [\"start\", \"middle\", \"end\"]}'"
+  },
+  "validation_features": {
+    "priority_levels": [
+      "critical_high",
+      "high", 
+      "medium",
+      "low",
+      "critical_low"
+    ],
+    "time_windows": [
+      "earliest",
+      "early",
+      "middle", 
+      "late",
+      "latest"
+    ],
+    "backwards_compatibility": {
+      "legacy_priority_levels": ["high", "medium", "low"],
+      "legacy_time_windows": ["early", "middle", "late"],
+      "note": "Legacy formats are automatically converted to new extended system"
+    },
+    "validation_version": "2.0",
+    "features": [
+      "Comprehensive input validation",
+      "Clear error messages with suggestions",
+      "Backwards compatibility with existing API calls",
+      "Extended priority levels and time windows",
+      "Custom penalty cost support",
+      "Automatic default value application",
+      "Duplicate address detection",
+      "Start/end point protection"
+    ]
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "addresses": [
+    "New York, NY",
+    "123 Critical Hospital, New York, NY",
+    "456 High Priority Office, New York, NY", 
+    "789 Medium Priority Store, New York, NY",
+    "321 Low Priority Warehouse, New York, NY",
+    "654 Critical Low Backup, New York, NY",
+    "Boston, MA"
+  ],
+  "priority_addresses": [
+    {
+      "address": "123 Critical Hospital, New York, NY",
+      "priority_level": "critical_high",
+      "preferred_time_window": "earliest",
+      "penalty_cost": 1500.0
+    },
+    {
+      "address": "456 High Priority Office, New York, NY",
+      "priority_level": "high", 
+      "preferred_time_window": "early"
+    },
+    {
+      "address": "789 Medium Priority Store, New York, NY",
+      "priority_level": "medium",
+      "preferred_time_window": "middle"
+    },
+    {
+      "address": "321 Low Priority Warehouse, New York, NY",
+      "priority_level": "low",
+      "preferred_time_window": "late"
+    },
+    {
+      "address": "654 Critical Low Backup, New York, NY",
+      "priority_level": "critical_low",
+      "preferred_time_window": "latest"
+    }
+  ],
+  "start_time": "2024-01-01T08:00:00Z",
+  "objective": "minimize_time",
+  "service_time_minutes": 5,
+  "route_name": "Extended Priority System Demo"
+}

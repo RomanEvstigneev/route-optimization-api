@@ -203,6 +203,27 @@ def api_optimize():
         # Extract optional priority addresses configuration
         priority_addresses_config = data.get('priority_addresses', None)
         
+        # Validate priority addresses configuration if provided
+        if priority_addresses_config:
+            valid_priority_levels = ['critical_high', 'high', 'medium', 'low', 'critical_low']
+            valid_time_windows = ['earliest', 'early', 'middle', 'late', 'latest']
+            
+            for priority_config in priority_addresses_config:
+                priority_level = priority_config.get('priority_level', 'medium')
+                preferred_time_window = priority_config.get('preferred_time_window', 'early')
+                
+                if priority_level not in valid_priority_levels:
+                    return jsonify({
+                        'error': f'Invalid priority_level "{priority_level}". Valid values: {valid_priority_levels}',
+                        'success': False
+                    }), 400
+                
+                if preferred_time_window not in valid_time_windows:
+                    return jsonify({
+                        'error': f'Invalid preferred_time_window "{preferred_time_window}". Valid values: {valid_time_windows}',
+                        'success': False
+                    }), 400
+        
         # Extract optional start time configuration
         start_time_config = data.get('start_time', None)
         
@@ -595,30 +616,44 @@ def create_priority_time_windows(addresses, priority_addresses_config, base_star
             logger.warning(f"Cannot prioritize start or end point: {priority_address}")
             continue
         
-        # Create time window based on priority level and preferred time
-        if preferred_time_window == 'early':
-            # Early delivery preference (23:00 - 01:00)
+        # Create time window based on preferred time window
+        if preferred_time_window == 'earliest':
+            # Earliest delivery preference (0 - 1.5 hours)
+            soft_start_time = base_start_time
+            soft_end_time = base_start_time + timedelta(hours=1.5)
+        elif preferred_time_window == 'early':
+            # Early delivery preference (0 - 2 hours)
             soft_start_time = base_start_time
             soft_end_time = base_start_time + timedelta(hours=2)
         elif preferred_time_window == 'middle':
-            # Middle delivery preference (01:00 - 03:00)
+            # Middle delivery preference (2 - 4 hours)
             soft_start_time = base_start_time + timedelta(hours=2)
             soft_end_time = base_start_time + timedelta(hours=4)
-        else:  # late
-            # Late delivery preference (03:00 - 05:00)
+        elif preferred_time_window == 'late':
+            # Late delivery preference (4 - 6 hours)
             soft_start_time = base_start_time + timedelta(hours=4)
             soft_end_time = base_start_time + timedelta(hours=6)
+        else:  # latest
+            # Latest delivery preference (6 - 8 hours)
+            soft_start_time = base_start_time + timedelta(hours=6)
+            soft_end_time = base_start_time + timedelta(hours=8)
         
-        # Set costs based on priority level (STRENGTHENED FOR BETTER PRIORITIZATION)
-        if priority_level == 'high':
-            cost_per_hour_before = 0.1   # Ultra low cost for early arrival (was 0.5)
-            cost_per_hour_after = 500.0  # EXTREME high cost for late arrival (was 100.0)
+        # Set costs based on priority level according to priority mapping
+        if priority_level == 'critical_high':
+            cost_per_hour_before = 0.05  # Very low cost for early arrival
+            cost_per_hour_after = 1000.0  # Maximum penalty for late arrival
+        elif priority_level == 'high':
+            cost_per_hour_before = 0.1   # Ultra low cost for early arrival
+            cost_per_hour_after = 500.0  # High penalty for late arrival
         elif priority_level == 'medium':
-            cost_per_hour_before = 1.0   # Low cost for early arrival (was 2.0)
-            cost_per_hour_after = 100.0  # High cost for late arrival (was 50.0)
-        else:  # low
-            cost_per_hour_before = 5.0   # Medium cost for early arrival (was 10.0)
-            cost_per_hour_after = 25.0   # Moderate cost for late arrival (was 15.0)
+            cost_per_hour_before = 1.0   # Low cost for early arrival 
+            cost_per_hour_after = 100.0  # Medium penalty for late arrival
+        elif priority_level == 'low':
+            cost_per_hour_before = 2.0   # Medium cost for early arrival
+            cost_per_hour_after = 200.0  # Updated penalty (was 25.0)
+        else:  # critical_low
+            cost_per_hour_before = 5.0   # Higher cost for early arrival
+            cost_per_hour_after = 100.0  # Lower penalty for late arrival
         
         time_window_config = {
             'address_index': address_index,

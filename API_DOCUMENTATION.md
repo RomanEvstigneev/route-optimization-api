@@ -127,8 +127,8 @@ Optimizes the order of addresses to minimize total travel time with separate sta
 | **objective** | string | **No** | **NEW:** Optimization objective: "minimize_time" (default), "minimize_distance", or "minimize_cost" |
 | **priority_addresses** | array | **No** | Array of priority address configurations |
 | **priority_addresses[].address** | string | **Yes** | **Exact address string** from addresses array |
-| **priority_addresses[].priority_level** | string | **Yes** | **Priority level:** "high", "medium", or "low" |
-| **priority_addresses[].preferred_time_window** | string | **No** | **Preferred time window:** "early", "middle", or "late" |
+| **priority_addresses[].priority_level** | string | **Yes** | **Priority level:** "critical_high", "high", "medium", "low", or "critical_low" |
+| **priority_addresses[].preferred_time_window** | string | **No** | **Preferred time window:** "earliest", "early", "middle", "late", or "latest" |
 | time_windows | object | No | Time windows configuration for soft/hard constraints |
 | time_windows.enabled | boolean | No | Whether to enable time windows (default: false) |
 | time_windows.windows | array | No | Array of time window configurations |
@@ -166,19 +166,25 @@ Optimizes the order of addresses to minimize total travel time with separate sta
 **Priority addresses allow you to prioritize specific addresses for early delivery in the route.**
 
 **Priority Levels:**
-- **high**: Delivers very early with strong cost penalties for delays
-- **medium**: Delivers moderately early with medium cost penalties  
-- **low**: Delivers somewhat early with light cost penalties
+- **critical_high**: Maximum priority with extreme hourly penalties for late delivery (1000.0/hour after window)
+- **high**: High priority with strong hourly penalties for late delivery (500.0/hour after window)
+- **medium**: Medium priority with moderate hourly penalties for late delivery (100.0/hour after window)
+- **low**: Low priority with higher hourly penalties for late delivery (200.0/hour after window)
+- **critical_low**: Minimal priority with lower hourly penalties for late delivery (100.0/hour after window)
 
 **Time Windows:**
-- **early**: 23:00-01:00 (first 2 hours)
-- **middle**: 01:00-03:00 (middle 2 hours)
-- **late**: 03:00-05:00 (last 2 hours)
+- **earliest**: 0-1.5 hours from route start (typically for critical_high priority addresses)
+- **early**: 0-2 hours from route start (typically for high priority addresses)
+- **middle**: 2-4 hours from route start (typically for medium priority addresses)
+- **late**: 4-6 hours from route start (typically for low priority addresses)
+- **latest**: 6-8 hours from route start (typically for critical_low priority addresses)
 
-**Cost Penalties:**
-- **High priority**: 0.5 cost before window, 100.0 cost after
-- **Medium priority**: 2.0 cost before window, 50.0 cost after
-- **Low priority**: 10.0 cost before window, 15.0 cost after
+**Cost Penalties (per hour):**
+- **critical_high**: 0.05 cost/hour before window, 1000.0 cost/hour after window (extreme priority)
+- **high**: 0.1 cost/hour before window, 500.0 cost/hour after window (high priority)
+- **medium**: 1.0 cost/hour before window, 100.0 cost/hour after window (medium priority)
+- **low**: 2.0 cost/hour before window, 200.0 cost/hour after window (updated penalty)
+- **critical_low**: 5.0 cost/hour before window, 100.0 cost/hour after window (minimal priority)
 
 #### Response
 
@@ -276,8 +282,8 @@ data = {
     "priority_addresses": [
         {
             "address": "Brandenburg Gate, Berlin, Germany",
-            "priority_level": "high",
-            "preferred_time_window": "early"
+            "priority_level": "critical_high",
+            "preferred_time_window": "earliest"
         }
     ]
 }
@@ -387,11 +393,50 @@ curl -X POST https://items-routes-route-optimisation-dot-maibach-items-routes.ew
     "priority_addresses": [
       {
         "address": "Brandenburg Gate, Berlin, Germany",
-        "priority_level": "high",
-        "preferred_time_window": "early"
+        "priority_level": "critical_high",
+        "preferred_time_window": "earliest"
       }
     ]
   }' | jq '.optimized_addresses, .timing_info, .optimization_objective'
+```
+
+**Complete priority mapping example:**
+```bash
+curl -X POST https://items-routes-route-optimisation-dot-maibach-items-routes.ew.r.appspot.com/api/optimize \
+  -H "Content-Type: application/json" \
+  -d '{
+    "addresses": [
+      "Distribution Center, Berlin",
+      "VIP Customer, Munich",
+      "Important Client, Hamburg", 
+      "Regular Customer, Dresden",
+      "Standard Delivery, Frankfurt",
+      "Low Priority, Cologne",
+      "Return Center, Stuttgart"
+    ],
+    "priority_addresses": [
+      {
+        "address": "VIP Customer, Munich",
+        "priority_level": "critical_high",
+        "preferred_time_window": "earliest"
+      },
+      {
+        "address": "Important Client, Hamburg",
+        "priority_level": "high",
+        "preferred_time_window": "early"
+      },
+      {
+        "address": "Standard Delivery, Frankfurt",
+        "priority_level": "low",
+        "preferred_time_window": "late"
+      },
+      {
+        "address": "Low Priority, Cologne",
+        "priority_level": "critical_low",
+        "preferred_time_window": "latest"
+      }
+    ]
+  }' | jq '.optimized_addresses'
 ```
 
 ## Route Logic & Examples
@@ -581,8 +626,8 @@ curl -X POST https://items-routes-route-optimisation-dot-maibach-items-routes.ew
 | `Invalid start_time format` | Malformed start_time string | Use ISO format like "2024-12-21T08:00:00Z" |
 | `Invalid objective` | Invalid objective value | Use "minimize_time", "minimize_distance", or "minimize_cost" |
 | `Priority address not found in addresses` | Priority address doesn't match any address | Ensure exact string match |
-| `Invalid priority level` | Invalid priority_level value | Use "high", "medium", or "low" |
-| `Invalid time window` | Invalid preferred_time_window | Use "early", "middle", or "late" |
+| `Invalid priority level` | Invalid priority_level value | Use "critical_high", "high", "medium", "low", or "critical_low" |
+| `Invalid time window` | Invalid preferred_time_window | Use "earliest", "early", "middle", "late", or "latest" |
 
 ### Address Format Best Practices
 
