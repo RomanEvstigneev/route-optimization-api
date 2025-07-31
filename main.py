@@ -672,8 +672,8 @@ def create_priority_time_windows(addresses, priority_addresses_config, base_star
         
         time_window_config = {
             'address_index': address_index,
-            'soft_start_time': soft_start_time.isoformat().replace('+00:00', 'Z'),
-            'soft_end_time': soft_end_time.isoformat().replace('+00:00', 'Z'),
+            'soft_start_time': soft_start_time.replace(microsecond=0).isoformat().replace('+00:00', 'Z'),
+            'soft_end_time': soft_end_time.replace(microsecond=0).isoformat().replace('+00:00', 'Z'),
             'cost_per_hour_before': cost_per_hour_before,
             'cost_per_hour_after': cost_per_hour_after
         }
@@ -781,8 +781,8 @@ def optimize_route_with_api(addresses, time_windows_config=None, priority_addres
             cost_per_kilometer = 1.0   # Low cost for distance
             cost_per_hour = 10.0      # High cost for time
         
-        start_time_str = start_time.isoformat().replace('+00:00', 'Z')
-        end_time_str = end_time.isoformat().replace('+00:00', 'Z')
+        start_time_str = start_time.replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+        end_time_str = end_time.replace(microsecond=0).isoformat().replace('+00:00', 'Z')
         
         logger.info(f"Route planning: Start at {start_time_str}, End by {end_time_str}")
         logger.info(f"Cost parameters: {cost_per_kilometer}/km, {cost_per_hour}/hour")

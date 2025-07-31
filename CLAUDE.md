@@ -2,6 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+IMPORTANT: if you need to read gcloud logs use those commands:
+1. gcloud app logs read --service=items-routes-route-optimisation --limit=200
+
 ## Project Overview
 
 This is a production-ready Flask API service for route optimization deployed on Google Cloud App Engine. It provides professional route optimization using Google's Route Optimization API with advanced features like priority addresses, custom start times, and flexible optimization objectives.
