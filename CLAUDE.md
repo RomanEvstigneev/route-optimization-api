@@ -20,6 +20,7 @@ This is a production-ready Flask API service for route optimization deployed on 
 - **Separate start/end point support** with optimized intermediate stops
 - **Priority address system** for early delivery prioritization
 - **Time windows support** (both hard and soft constraints)
+- **Configurable service time** per stop (customizable via service_time_minutes parameter)
 - **Custom optimization objectives** (minimize_time, minimize_distance, minimize_cost)
 
 ### API Endpoints
@@ -31,6 +32,7 @@ This is a production-ready Flask API service for route optimization deployed on 
 ### Key Features
 - **Priority Addresses**: Prioritize specific addresses for early delivery with configurable priority levels (high/medium/low) and time windows (early/middle/late)
 - **Custom Start Times**: Configure route start time instead of fixed 23:00 default
+- **Configurable Service Time**: Adjust time spent at each stop via service_time_minutes parameter (default: 3 minutes)
 - **Optimization Objectives**: Choose between minimizing time, distance, or cost
 - **Unlimited Address Support**: No longer limited to 25 addresses (removed in v2.3.0)
 - **International Support**: Tested with Unicode addresses (German addresses with ü, ß, ä, ö)

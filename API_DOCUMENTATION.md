@@ -17,6 +17,7 @@ This API provides professional route optimization functionality for delivery rou
 - ✅ **Production Ready** - Deployed on Google Cloud App Engine
 - ✅ **Priority Addresses** - Prioritize specific addresses for early delivery
 - ✅ **Custom Start Time** - Configure route start time instead of fixed 23:00
+- ✅ **Configurable Service Time** - Adjust time spent at each stop (default 3 minutes)
 - ✅ **Optimization Objectives** - Choose between minimizing time, distance, or cost
 - ✅ **Scalable** - Auto-scaling up to 5 instances
 - ✅ **Secure** - HTTPS enabled for all endpoints
@@ -96,6 +97,7 @@ Optimizes the order of addresses to minimize total travel time with separate sta
   ],
   "start_time": "2024-12-21T08:00:00Z",
   "objective": "minimize_time|minimize_distance|minimize_cost",
+  "service_time_minutes": 3,
   "priority_addresses": [
     {
       "address": "exact address string",
@@ -125,6 +127,7 @@ Optimizes the order of addresses to minimize total travel time with separate sta
 | addresses | array | Yes | List of addresses to optimize (minimum 2 addresses). First = start point, last = end point, middle = optimized |
 | **start_time** | string | **No** | **NEW:** Custom start time in ISO format (e.g., "2024-12-21T08:00:00Z"). If not provided, defaults to 23:00 today |
 | **objective** | string | **No** | **NEW:** Optimization objective: "minimize_time" (default), "minimize_distance", or "minimize_cost" |
+| **service_time_minutes** | integer | **No** | Service time per stop in minutes (default: 3). Time spent at each customer location for delivery/service |
 | **priority_addresses** | array | **No** | Array of priority address configurations |
 | **priority_addresses[].address** | string | **Yes** | **Exact address string** from addresses array |
 | **priority_addresses[].priority_level** | string | **Yes** | **Priority level:** "critical_high", "high", "medium", "low", or "critical_low" |
@@ -160,6 +163,29 @@ Optimizes the order of addresses to minimize total travel time with separate sta
 | **minimize_time** | 1.0 (low) | 10.0 (high) | Time-sensitive deliveries, medical supplies |
 | **minimize_distance** | 10.0 (high) | 0.1 (low) | Fuel cost optimization, long-distance routes |
 | **minimize_cost** | 5.0 (medium) | 2.0 (medium) | Balanced efficiency, general logistics |
+
+#### Service Time Configuration
+
+Configure the time spent at each customer location for delivery, service, or pickup operations.
+
+**Parameter:** `service_time_minutes` (integer, optional)
+**Default:** 3 minutes
+**Range:** 1-60 minutes (recommended)
+
+**Description:**
+The service time represents the duration the vehicle spends at each customer stop. This includes:
+- Unloading/loading packages
+- Customer interaction
+- Paperwork or digital confirmation
+- Physical access time (parking, walking to door, etc.)
+
+**Examples:**
+- `"service_time_minutes": 3` - Quick delivery (default, suitable for standard deliveries)
+- `"service_time_minutes": 5` - Standard delivery with signature
+- `"service_time_minutes": 10` - Complex delivery (multiple packages, assembly required)
+- `"service_time_minutes": 15` - Service call (installation, repair, consultation)
+
+**Note:** Service time applies to all customer stops (middle addresses). Start and end points have 0 service time.
 
 #### Priority Address Functionality
 
@@ -319,6 +345,7 @@ data = {
     ],
     "start_time": "2024-12-21T08:00:00Z",          # NEW: Custom start time
     "objective": "minimize_distance",               # NEW: Optimization objective
+    "service_time_minutes": 5,                      # Service time per stop (default: 3)
     "priority_addresses": [
         {
             "address": "Brandenburg Gate, Berlin, Germany",
@@ -371,6 +398,7 @@ data = {
     ],
     "start_time": "2024-12-21T07:30:00Z",                     # Early morning start
     "objective": "minimize_cost",                             # Balanced optimization
+    "service_time_minutes": 4,                                # 4 minutes per stop
     "priority_addresses": [
         {
             "address": "Lippacher Str. 1, 84095 Furth, Deutschland",
@@ -498,6 +526,7 @@ curl -X POST https://items-routes-route-optimisation-dot-maibach-items-routes.ew
     ],
     "start_time": "2024-12-21T08:00:00Z",
     "objective": "minimize_distance",
+    "service_time_minutes": 5,
     "priority_addresses": [
       {
         "address": "Brandenburg Gate, Berlin, Germany",
@@ -686,6 +715,7 @@ curl -X POST https://items-routes-route-optimisation-dot-maibach-items-routes.ew
     ],
     "start_time": "2024-12-21T09:00:00Z",
     "objective": "minimize_distance",
+    "service_time_minutes": 5,
     "priority_addresses": [
       {
         "address": "Munich, Germany",
@@ -712,6 +742,7 @@ curl -X POST https://items-routes-route-optimisation-dot-maibach-items-routes.ew
     ],
     "start_time": "2024-12-21T07:00:00Z",
     "objective": "minimize_cost",
+    "service_time_minutes": 4,
     "priority_addresses": [
       {
         "address": "Lippacher Str. 1, 84095 Furth, Deutschland",
@@ -725,8 +756,9 @@ curl -X POST https://items-routes-route-optimisation-dot-maibach-items-routes.ew
 **Verified Results:**
 - ✅ **Custom start time** - Vehicle starts at configured 07:00 instead of default 23:00
 - ✅ **Optimization objective** - Successfully applies minimize_cost strategy
+- ✅ **Service time configuration** - Configurable service time per stop (default 3 minutes)
 - ✅ **Priority optimization** - Priority address positioned early in route
-- ✅ **Detailed timing** - All timing calculations adjusted for custom start time
+- ✅ **Detailed timing** - All timing calculations adjusted for custom start time and service duration
 - ✅ **Cost parameters** - Applied cost structure: 5.0/km, 2.0/hour for balanced optimization
 - ✅ **Complete integration** - All features work seamlessly together
 
